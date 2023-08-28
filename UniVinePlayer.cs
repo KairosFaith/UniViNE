@@ -12,13 +12,9 @@ public class UniVinePlayer : MonoBehaviour
     public Image BackgroundDisplay;
     Dictionary<string, Sprite> BackgroundSpritesBank = new Dictionary<string, Sprite>();
     Dictionary<(string, VineCharacterEmotion), Sprite> CharacterSpriteBank = new Dictionary<(string, VineCharacterEmotion), Sprite>();
+    //Data To Save
     Dictionary<string, string> CharacterToSpriteLink = new Dictionary<string, string>();
-    void Awake()
-    {
-        Sprite[] sprites = Resources.LoadAll<Sprite>("Backgrounds");
-        foreach (var sprite in sprites)
-            BackgroundSpritesBank.Add(sprite.name, sprite);
-    }
+    string CurrentPlayerCharacter;
     public TMP_Text OutputLine(VineLineOutput line)
     {
         var t = Instantiate(TextBoxPrefab, transform);
@@ -36,29 +32,45 @@ public class UniVinePlayer : MonoBehaviour
                 Source.Play();
                 break;
             case VineMarkType.Background:
-                BackgroundDisplay.sprite = BackgroundSpritesBank[mark.Text[0]];
+                string id = mark.Text[0];
+                if (BackgroundSpritesBank.TryGetValue(id, out Sprite bg))
+                    BackgroundDisplay.sprite = bg;
+                else
+                    BackgroundDisplay.sprite = LoadBackground(id);
                 break;
             case VineMarkType.SetPlayerCharacter:
+                CurrentPlayerCharacter = mark.Text[0];
                 break;
             case VineMarkType.SetCharacterSprite:
-                LoadSprites(mark);
+                LoadCharacterSprites(mark);
                 break;
         }
     }
-    void LoadSprites(VineMarkedOutput mark)
+    void LoadCharacterSprites(VineMarkedOutput mark)
     {
         string[] args = mark.Text;
         string spriteID = args[1];
         CharacterToSpriteLink[args[0]] = args[1];
+        if (CharacterSpriteBank.TryGetValue((spriteID, VineCharacterEmotion.Default), out _))
+            return;//sprite already loaded
         foreach (VineCharacterEmotion emotion in Enum.GetValues(typeof(VineCharacterEmotion)))
         {
             string spriteFileName = spriteID + emotion;
             Sprite s = Resources.Load<Sprite>("CharacterSprites/" + spriteFileName);
+            if (s == null)
+                s = CharacterSpriteBank[(spriteID, VineCharacterEmotion.Default)];//if the character has no emotions, use the default one
             CharacterSpriteBank[(spriteID, emotion)] = s;
         }
     }
+    Sprite LoadBackground(string id)
+    {
+        Sprite s = Resources.Load<Sprite>("Backgrounds/" + id);
+        BackgroundSpritesBank.Add(id, s);
+        return s;
+    }
     public UniVineInteractionUI PlayInteraction(VinePassageMetadata metadata)
     {
+        //metadata determines what kind of interaction
         return Instantiate(InteractionPrefab,transform);
     }
 }
