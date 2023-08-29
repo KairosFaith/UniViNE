@@ -146,6 +146,7 @@ public class VineLineOutput : VinePassageOutput
         Emotion = emotion;
     }
 }
+[Serializable]
 public class VineMarkedOutput : VinePassageOutput
 {
     public VineMarkType MarkType;

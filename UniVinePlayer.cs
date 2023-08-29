@@ -7,50 +7,43 @@ using Vine;
 public class UniVinePlayer : MonoBehaviour
 {
     public TMP_Text TextBoxPrefab;
+    public Image CharacterDisplayPrefab;
+    public Transform PlayerDisplayAnchor, OppositeDisplayAnchor;
     public UniVineInteractionUI InteractionPrefab;
     public AudioSource Source;
     public Image BackgroundDisplay;
     Dictionary<string, Sprite> BackgroundSpritesBank = new Dictionary<string, Sprite>();
     Dictionary<(string, VineCharacterEmotion), Sprite> CharacterSpriteBank = new Dictionary<(string, VineCharacterEmotion), Sprite>();
-    //Data To Save
-    Dictionary<string, string> CharacterToSpriteLink = new Dictionary<string, string>();
-    string CurrentPlayerCharacter;
-    public TMP_Text OutputLine(VineLineOutput line)
+    public TMP_Text OutputLine(VineLineOutput line, UniVineLoader loader)
     {
+        string whosTalking = line.Character;
+        if (whosTalking == "Narration")
+        {
+            //No character sprite, huge text box on the top
+        }
+        else
+        {
+            Transform anchor = null;
+            bool isPlayer = whosTalking == loader.CurrentPlayerCharacter;
+            if (isPlayer)
+                anchor = PlayerDisplayAnchor;//Image on left side
+            else
+                anchor = OppositeDisplayAnchor;//Image on right side
+            Image image = Instantiate(CharacterDisplayPrefab, anchor);
+            image.sprite = CharacterSpriteBank[(loader.CharacterToSpriteLink[whosTalking], line.Emotion)];
+            if (!isPlayer)
+                image.transform.localScale = new Vector3(-1, 1, 1);//TODO can do this using the anchor instead? hmmm hope i can omit this line
+        }
+
         var t = Instantiate(TextBoxPrefab, transform);
         t.maxVisibleCharacters = 0;
         return t;
     }
-    public void ProcessMarker(VineMarkedOutput mark)
-    {
-        switch (mark.MarkType)
-        {
-            case VineMarkType.Music:
-                //fade?
-                Source.Stop();
-                //change clip
-                Source.Play();
-                break;
-            case VineMarkType.Background:
-                string id = mark.Text[0];
-                if (BackgroundSpritesBank.TryGetValue(id, out Sprite bg))
-                    BackgroundDisplay.sprite = bg;
-                else
-                    BackgroundDisplay.sprite = LoadBackground(id);
-                break;
-            case VineMarkType.SetPlayerCharacter:
-                CurrentPlayerCharacter = mark.Text[0];
-                break;
-            case VineMarkType.SetCharacterSprite:
-                LoadCharacterSprites(mark);
-                break;
-        }
-    }
-    void LoadCharacterSprites(VineMarkedOutput mark)
+    public void LoadCharacterSprites(VineMarkedOutput mark, UniVineLoader loader)
     {
         string[] args = mark.Text;
         string spriteID = args[1];
-        CharacterToSpriteLink[args[0]] = args[1];
+        loader.CharacterToSpriteLink[args[0]] = args[1];
         if (CharacterSpriteBank.TryGetValue((spriteID, VineCharacterEmotion.Default), out _))
             return;//sprite already loaded
         foreach (VineCharacterEmotion emotion in Enum.GetValues(typeof(VineCharacterEmotion)))
@@ -62,6 +55,13 @@ public class UniVinePlayer : MonoBehaviour
             CharacterSpriteBank[(spriteID, emotion)] = s;
         }
     }
+    public void SetBackground(string id)
+    {
+        if (BackgroundSpritesBank.TryGetValue(id, out Sprite bg))
+            BackgroundDisplay.sprite = bg;
+        else
+            BackgroundDisplay.sprite = LoadBackground(id);
+    }
     Sprite LoadBackground(string id)
     {
         Sprite s = Resources.Load<Sprite>("Backgrounds/" + id);
@@ -72,5 +72,11 @@ public class UniVinePlayer : MonoBehaviour
     {
         //metadata determines what kind of interaction
         return Instantiate(InteractionPrefab,transform);
+    }
+    public void SetMusic(string id)
+    {
+        Source.Stop();
+        Source.clip = Resources.Load<AudioClip>("Music/" + id);
+        Source.Play();
     }
 }
