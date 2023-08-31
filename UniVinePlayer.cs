@@ -6,40 +6,53 @@ using UnityEngine.UI;
 using Vine;
 public class UniVinePlayer : MonoBehaviour
 {
-    public TMP_Text TextBoxPrefab;
+    const string//folder names
+        Narration = "Narration",
+        CharacterSprites = "CharacterSprites",
+        Backgrounds = "Backgrounds",
+        Music = "Music";
+        //Slash = "/";
+    public UniVineSpeechBox PlayerSpeechBoxPrefab, OppositeSpeechBoxPrefab;
+    public TMP_Text NarrationBox;
+    public Transform SpeechBoxAnchor;
     public UniVineInteractionUI InteractionPrefab;
     public AudioSource Source;
     public Image BackgroundDisplay;
-    Dictionary<string, Sprite> BackgroundSpritesBank = new Dictionary<string, Sprite>();
-    Dictionary<(string, VineCharacterEmotion), Sprite> CharacterSpriteBank = new Dictionary<(string, VineCharacterEmotion), Sprite>();
+    Dictionary<string, Sprite> _BackgroundSpritesBank = new Dictionary<string, Sprite>();
+    Dictionary<(string, VineCharacterEmotion), Sprite> _CharacterSpriteBank = new Dictionary<(string, VineCharacterEmotion), Sprite>();
     //Data To Save
-    Dictionary<string, string> CharacterToSpriteLink = new Dictionary<string, string>();
-    string CurrentPlayerCharacter;
-    public TMP_Text OutputLine(VineLineOutput line)
+    Dictionary<string, string> _CharacterToSpriteLink = new Dictionary<string, string>();
+    GameObject _ObjectToClear;
+    public TMP_Text OutputLine(VineLineOutput line, UniVineLoader loader)
     {
-        var t = Instantiate(TextBoxPrefab, transform);
-        t.maxVisibleCharacters = 0;
-        return t;
+        string lineCharacter = line.Character;
+        UniVineSpeechBox boxToSpawn = OppositeSpeechBoxPrefab;
+        if (lineCharacter == loader.CurrentPlayerCharacter)
+            boxToSpawn = PlayerSpeechBoxPrefab;
+        else if (lineCharacter == Narration)
+        {
+            var o = Instantiate(NarrationBox, transform);
+            o.text = line.Text;
+            _ObjectToClear = o.gameObject;
+            return o;
+        }
+        UniVineSpeechBox b = Instantiate(boxToSpawn, SpeechBoxAnchor);
+        _ObjectToClear = b.gameObject;
+        Sprite characterSprite = GetCharacterSprite(line);
+        return b.SetSpeechBox(line, characterSprite);
     }
-    public void ProcessMarker(VineMarkedOutput mark)
+    public void ProcessMarker(VineMarkedOutput mark, UniVineLoader loader)
     {
         switch (mark.MarkType)
         {
             case VineMarkType.Music:
-                //fade?
-                Source.Stop();
-                //change clip
-                Source.Play();
+                SetMusic(mark.Text[0]);
                 break;
             case VineMarkType.Background:
-                string id = mark.Text[0];
-                if (BackgroundSpritesBank.TryGetValue(id, out Sprite bg))
-                    BackgroundDisplay.sprite = bg;
-                else
-                    BackgroundDisplay.sprite = LoadBackground(id);
+                SetBackground(mark.Text[0]);
                 break;
             case VineMarkType.SetPlayerCharacter:
-                CurrentPlayerCharacter = mark.Text[0];
+                loader.CurrentPlayerCharacter = mark.Text[0];
                 break;
             case VineMarkType.SetCharacterSprite:
                 LoadCharacterSprites(mark);
@@ -50,27 +63,49 @@ public class UniVinePlayer : MonoBehaviour
     {
         string[] args = mark.Text;
         string spriteID = args[1];
-        CharacterToSpriteLink[args[0]] = args[1];
-        if (CharacterSpriteBank.TryGetValue((spriteID, VineCharacterEmotion.Default), out _))
+        _CharacterToSpriteLink[args[0]] = args[1];
+        if (_CharacterSpriteBank.TryGetValue((spriteID, VineCharacterEmotion.Default), out _))
             return;//sprite already loaded
         foreach (VineCharacterEmotion emotion in Enum.GetValues(typeof(VineCharacterEmotion)))
         {
             string spriteFileName = spriteID + emotion;
-            Sprite s = Resources.Load<Sprite>("CharacterSprites/" + spriteFileName);
+            Sprite s = Resources.Load<Sprite>(CharacterSprites + "/" + spriteFileName);
             if (s == null)
-                s = CharacterSpriteBank[(spriteID, VineCharacterEmotion.Default)];//if the character has no emotions, use the default one
-            CharacterSpriteBank[(spriteID, emotion)] = s;
+                s = _CharacterSpriteBank[(spriteID, VineCharacterEmotion.Default)];//if the character has no emotions, use the default one
+            _CharacterSpriteBank[(spriteID, emotion)] = s;
         }
+    }
+    Sprite GetCharacterSprite(VineLineOutput line)
+    {
+        string spriteID = _CharacterToSpriteLink[line.Character];
+        return _CharacterSpriteBank[(spriteID, line.Emotion)];
+    }
+    void SetBackground(string id)
+    {
+        if (_BackgroundSpritesBank.TryGetValue(id, out Sprite bg))
+            BackgroundDisplay.sprite = bg;
+        else
+            BackgroundDisplay.sprite = LoadBackground(id);
     }
     Sprite LoadBackground(string id)
     {
-        Sprite s = Resources.Load<Sprite>("Backgrounds/" + id);
-        BackgroundSpritesBank.Add(id, s);
+        Sprite s = Resources.Load<Sprite>(Backgrounds + "/" + id);
+        _BackgroundSpritesBank.Add(id, s);
         return s;
     }
     public UniVineInteractionUI PlayInteraction(VinePassageMetadata metadata)
     {
         //metadata determines what kind of interaction
         return Instantiate(InteractionPrefab,transform);
+    }
+    void SetMusic(string id)
+    {
+        Source.Stop();
+        Source.clip = Resources.Load<AudioClip>(Music+"/" + id);
+        Source.Play();
+    }
+    public void ClearPrevObject()
+    {
+        Destroy(_ObjectToClear);
     }
 }

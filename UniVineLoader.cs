@@ -1,3 +1,4 @@
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
@@ -7,56 +8,70 @@ using Vine;
 using TMPro;
 public class UniVineLoader : MonoBehaviour, IPointerDownHandler
 {
+    const string Interaction = "Interaction";
     public UniVinePlayer Player;
-    VineStory Story;
-    string CurrentPassage, JsonSave;
-    bool Pressed = false;
+    public float LetterRate = .1f;
+    VineStory _Story;
+    bool _Pressed = false;
+    //Data to Save
+    string _CurrentPassage, _JsonSave;
+    public string CurrentPlayerCharacter;
     void Start()
     {
-        Story = new PrologueTestStory();
-        LoadPassage(Story.StartPassage);
+        StartStory("PrologueTestStory");
+    }
+    void StartStory(string StoryID)
+    {
+        _Story = Activator.CreateInstance(Type.GetType(StoryID)) as VineStory;
+        LoadPassage(_Story.StartPassage);
+    }
+    void SaveStory()
+    {
+
+    }
+    void ResumeStory(string StoryID)
+    {
+
     }
     public void LoadPassage(string passageName)
     {
-        var pdata = Story.FetchNextPassage(passageName, out string n);
-        CurrentPassage = passageName;
-        JsonSave = Story.PackVariables();
+        var pdata = _Story.FetchNextPassage(passageName, out string n);
+        _CurrentPassage = passageName;
+        _JsonSave = _Story.PackVariables();
         MethodInfo method = typeof(PrologueTestStory).GetMethod(n);
-        var passage = (IEnumerable<VinePassageOutput>)method.Invoke(Story, null);
-        if (pdata.Name.Contains("Interaction"))//TODO check passage type
+        var passage = (IEnumerable<VinePassageOutput>)method.Invoke(_Story, null);
+        if (pdata.Name.Contains(Interaction))//TODO check passage type
             InteractionRoutine(passage,pdata);
         else
             StartCoroutine(PassageRoutine(passage));
     }
     IEnumerator PassageRoutine(IEnumerable<VinePassageOutput> passage)
     {
-        TMP_Text textBox = null;
         foreach (VinePassageOutput output in passage)
         {
             if (output is VineLineOutput line)
             {
-                Pressed = false;
-                textBox = Player.OutputLine(line);
-                string show = textBox.text = line.Text;
-                int stringLength = show.Length;
+                _Pressed = false;
+                TMP_Text textBox = Player.OutputLine(line, this);
+                int stringLength = line.Text.Length;
                 for (int i = 0;i< stringLength; i++)
                 {
                     textBox.maxVisibleCharacters = i;
-                    yield return new WaitForSeconds(.1f);
-                    if (Pressed)
+                    yield return new WaitForSeconds(LetterRate);
+                    if (_Pressed)
                     {
                         textBox.maxVisibleCharacters = stringLength;
-                        Pressed = false;
                         break;
                     }
                 }
-                while (!Pressed)
+                _Pressed = false;
+                while (!_Pressed)
                     yield return new WaitForEndOfFrame();
-                Pressed = false;
-                Destroy(textBox.gameObject);
+                Player.ClearPrevObject();
+                _Pressed = false;
             }
             else if (output is VineMarkedOutput mark)
-                Player.ProcessMarker(mark);
+                Player.ProcessMarker(mark, this);
             else if (output is VineLinkOutput link)
                 LoadPassage(link.PassageName);
         }
@@ -74,6 +89,6 @@ public class UniVineLoader : MonoBehaviour, IPointerDownHandler
     }
     public void OnPointerDown(PointerEventData eventData)
     {
-        Pressed = true;
+        _Pressed = true;
     }
 }
