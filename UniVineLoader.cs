@@ -3,23 +3,18 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using System.Reflection;
-using UnityEngine.EventSystems;
 using Vine;
-using TMPro;
-using UnityEngine.Networking.Types;
-using System;
-
-public class UniVineLoader : MonoBehaviour, IPointerDownHandler
+public class UniVineLoader : MonoBehaviour
 {
-    public UniVinePlayer Player;
     VineStory Story;
-    string CurrentPassage, JsonSave;
-    bool Pressed = false;
+    public UniVinePlayer Player;
+    public Action LineCallback;
     //Current Data to save
+    string CurrentPassage, JsonSave;
     public string CurrentPlayerCharacter;
     public Dictionary<string, string> CharacterToSpriteLink = new Dictionary<string, string>();
-    List<string> HistoryPassage = new List<string>();
-    void Start()
+    List<string> _HistoryPassage = new List<string>();
+    void Start()//for testing only, To remove
     {
         StartStory("PrologueTestStory");
     }
@@ -43,7 +38,7 @@ public class UniVineLoader : MonoBehaviour, IPointerDownHandler
         MethodInfo method = typeof(PrologueTestStory).GetMethod(n);
         var passage = (IEnumerable<VinePassageOutput>)method.Invoke(Story, null);
         CurrentPassage = passageName;
-        HistoryPassage.Add(passageName);
+        _HistoryPassage.Add(passageName);
         if (passageName.Contains("Interaction"))//TODO check passage type
             InteractionRoutine(passage,pdata);
         else
@@ -51,30 +46,16 @@ public class UniVineLoader : MonoBehaviour, IPointerDownHandler
     }
     IEnumerator PassageRoutine(IEnumerable<VinePassageOutput> passage)
     {
-        TMP_Text textBox = null;
         foreach (VinePassageOutput output in passage)
         {
             if (output is VineLineOutput line)
             {
-                Pressed = false;
-                textBox = Player.OutputLine(line,this);
-                string show = textBox.text = line.Text;
-                int stringLength = show.Length;
-                for (int i = 0;i< stringLength; i++)
-                {
-                    textBox.maxVisibleCharacters = i;
-                    yield return new WaitForSeconds(.1f);
-                    if (Pressed)
-                    {
-                        textBox.maxVisibleCharacters = stringLength;
-                        Pressed = false;
-                        break;
-                    }
-                }
-                while (!Pressed)
-                    yield return new WaitForEndOfFrame();
-                Pressed = false;
-                Destroy(textBox.gameObject);
+                bool _Pressed = false;
+                LineCallback = () => _Pressed = true;
+                //show text
+                Player.OutputLine(line, this);
+                //wait
+                yield return new WaitUntil(() => _Pressed);
             }
             else if (output is VineMarkedOutput mark)
                 ProcessMarker(mark);
@@ -110,9 +91,5 @@ public class UniVineLoader : MonoBehaviour, IPointerDownHandler
                 UI.SetLink(link);
             else if (output is VineDelayLinkOutput dlink)
                 UI.SetTimer(dlink);
-    }
-    public void OnPointerDown(PointerEventData eventData)
-    {
-        Pressed = true;
     }
 }

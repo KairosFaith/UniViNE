@@ -4,7 +4,7 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 using Vine;
-public class UniVinePlayer : MonoBehaviour
+public class UniVinePlayer : MonoBehaviour//, IPointerDownHandler
 {
     public TMP_Text TextBoxPrefab;
     public Image CharacterDisplayPrefab;
@@ -16,6 +16,23 @@ public class UniVinePlayer : MonoBehaviour
     Dictionary<(string, VineCharacterEmotion), Sprite> CharacterSpriteBank = new Dictionary<(string, VineCharacterEmotion), Sprite>();
     public TMP_Text OutputLine(VineLineOutput line, UniVineLoader loader)
     {
+        //TMP_Text textBox = null;
+        //textBox = Player.OutputLine(line,this);
+        //string show = textBox.text = line.Text;
+        //int stringLength = show.Length;
+        //for (int i = 0;i< stringLength; i++)
+        //{
+        //    textBox.maxVisibleCharacters = i;
+        //    yield return new WaitForSeconds(.1f);
+        //    if (_Pressed)
+        //    {
+        //        textBox.maxVisibleCharacters = stringLength;
+        //        _Pressed = false;
+        //        break;
+        //    }
+        //}
+
+
         string whosTalking = line.Character;
         if (whosTalking == "Narration")
         {
@@ -38,6 +55,9 @@ public class UniVinePlayer : MonoBehaviour
         var t = Instantiate(TextBoxPrefab, transform);
         t.maxVisibleCharacters = 0;
         return t;
+        
+        //_Pressed = false;
+        //Destroy(textBox.gameObject);
     }
     public void LoadCharacterSprites(VineMarkedOutput mark, UniVineLoader loader)
     {
