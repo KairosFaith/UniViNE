@@ -1,17 +1,32 @@
 using UnityEngine;
-using UnityEngine.UI;
 using TMPro;
 using Vine;
-public class UniVineSpeechBox : MonoBehaviour
+using UnityEngine.UI;
+public class UniVineSpeechBox : IUniVineTextBox
 {
-    public Image CharacterDisplay;
-    public TMP_Text Header, Body;
-    public TMP_Text SetSpeechBox(VineLineOutput line, Sprite characterSprite)
+    public Transform PlayerPicAnchor, OppositePicAnchor;
+    public TMP_Text Header;
+    public override void InitiateBox(VineLineOutput line)
     {
-        Header.text = line.Character;
-        CharacterDisplay.sprite = characterSprite;
-        Body.text = line.Text;
-        Body.maxVisibleCharacters = 0;
-        return Body;
+        OnBoxOpen += () =>
+        {
+            VineLoader loader = UniVinePlayer.Instance.Loader;
+            string lineCharacter = line.Character;
+            Header.text = lineCharacter;
+            if (loader.CharacterToSpriteLink.TryGetValue(lineCharacter, out _))
+            {
+                UniVinePlayer playerInstance = UniVinePlayer.Instance;
+                //opposite character set scale to -1
+                Transform picAnchor = OppositePicAnchor;
+                bool playerTaking = lineCharacter == loader.CurrentPlayerCharacter;
+                if (playerTaking)
+                    picAnchor = PlayerPicAnchor;
+                UniVinePortraitFrame frame = Instantiate(playerInstance.PortraitFramePrefab, picAnchor);
+                frame.SetCharacterSprite(playerInstance.FetchCharacterSprite(line), playerTaking);
+                FramesToShrink.Add(frame.transform);
+            }
+        };
+        OnBoxClose += () => Header.text = "";
+        base.InitiateBox(line);
     }
 }

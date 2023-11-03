@@ -1,8 +1,6 @@
 using System;
 using System.Collections.Generic;
-using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices;
-using UnityEditor.U2D.Sprites;
+using System.Reflection;
 using UnityEngine;
 namespace Vine
 {
@@ -14,15 +12,93 @@ public enum VineCharacterEmotion
     Sad,
     Scream,
 }
-public enum VineMarkType
-{
-    SetPlayerCharacter,
-    SetCharacterSprite,
-    Invoke,//Invoke Unity Function
-    Background,
-    Music,
-}
-public abstract class VineStory
+    public interface VinePlayer
+    {
+        public VineLoader Loader { get; set; }
+        public void OutputLine(VineLineOutput line);
+        public void ShowTitle(VineHeaderOutput header);
+        public VineInteraction PlayInteraction(VinePassageMetadata metadata);
+        public void SendMessage(string methodName, object value = null, SendMessageOptions options = SendMessageOptions.RequireReceiver);
+    }
+    public interface VineInteraction
+    {
+        public void ProcessOutput(VinePassageOutput output);
+    }
+    public class VineLoader
+    {
+        const string Interaction = "Interaction";
+        public VinePlayer StoryPlayer;
+        public VineLoader(VinePlayer storyPlayer)
+        {
+            StoryPlayer = storyPlayer;
+        }
+        VineStory _Story;
+        //Data to Save
+        string _CurrentPassageName, _JsonSave;
+        public Dictionary<string, string> CharacterToSpriteLink = new Dictionary<string, string>();
+        public string CurrentPlayerCharacter;
+        IEnumerator<VinePassageOutput> _CurrentPassage;
+        public void StartStory(string StoryID)
+        {
+            _Story = Activator.CreateInstance(Type.GetType(StoryID)) as VineStory;
+            LoadPassage(_Story.StartPassage);
+        }
+        void SaveStory()
+        {
+
+        }
+        void ResumeStory(string StoryID)
+        {
+
+        }
+        public void LoadPassage(string passageName)
+        {
+            var pdata = _Story.FetchPassage(passageName, out string n);
+            _CurrentPassageName = passageName;
+            _JsonSave = _Story.PackVariables();
+            MethodInfo method = typeof(Prologue).GetMethod(n);
+            var passage = (IEnumerator<VinePassageOutput>)method.Invoke(_Story, null);
+            if (pdata.Name.Contains(Interaction))//TODO check passage type
+                InteractionRoutine(passage, pdata);
+            else
+            {
+                _CurrentPassage = passage;
+                NextLineInPassage();
+            }
+        }
+        public void NextLineInPassage()
+        {
+            if (_CurrentPassage.MoveNext())
+            {
+                VinePassageOutput output = _CurrentPassage.Current;
+                if (output is VineLineOutput line)
+                    StoryPlayer.OutputLine(line);
+                else if (output is VineHeaderOutput header)
+                    StoryPlayer.ShowTitle(header);
+                else if (output is UniVineMarkedOutput mark)
+                {
+                    StoryPlayer.SendMessage(mark.MethodName, mark.Value);
+                    NextLineInPassage();
+                }
+                else if (output is VineLinkOutput link)
+                    LoadPassage(link.PassageName);
+                else
+                    Debug.LogError("Unknown output type");
+            }
+            else
+            {
+                _CurrentPassage = null;//TODO????
+                Debug.Log("End of passage");
+            }
+        }
+        void InteractionRoutine(IEnumerator<VinePassageOutput> passage, VinePassageMetadata metadata)
+        {
+            VineInteraction UI = UniVinePlayer.Instance.PlayInteraction(metadata);
+            while (passage.MoveNext())
+                UI.ProcessOutput(passage.Current);
+        }
+    }
+    public abstract class VineStory
 {
     public abstract string JSON_Metadata { get; }
     public string StoryName, StartPassage;
@@ -37,15 +113,14 @@ public abstract class VineStory
         foreach (var metadataItem in p)
             Passages.Add(metadataItem.Name, metadataItem);
     }
-    public VinePassageMetadata FetchNextPassage(string passageName, out string functionName)
+    public VinePassageMetadata FetchPassage(string passageName, out string functionName)
     {
         if(Passages.TryGetValue(passageName, out VinePassageMetadata metadata))
         {
             functionName = $"Passage{metadata.ID}";
             return metadata;
         }
-        functionName = null;
-        return null;
+        throw new Exception($"Passage {passageName} not found");
     }
         public string PackVariables()
         {
@@ -147,21 +222,6 @@ public class VineLineOutput : VinePassageOutput
     }
 }
 [Serializable]
-public class VineMarkedOutput : VinePassageOutput
-{
-    public VineMarkType MarkType;
-    public string[] Text;
-    //public VineMarkedOutput(string characterName)
-    //{
-    //    MarkType = VineMarkType.PlayerCharacter;
-    //    Text = characterName;
-    //}
-    public VineMarkedOutput(VineMarkType mark, params string[] text)
-    {
-        MarkType = mark;
-        Text = text;
-    }
-}
 public class VineLinkOutput : VinePassageOutput
 {
     public string TextClick, PassageName;
@@ -192,8 +252,7 @@ public class VineDelayLinkOutput : VineLinkOutput
     {
         Delay = delay;
         PassageName = passageName;
-        //TextClick = PassageName = passageName;
     }
-    public VineDelayLinkOutput() { }//nonsense 
+    public VineDelayLinkOutput() { }//C# nonsense 
 }
 }
