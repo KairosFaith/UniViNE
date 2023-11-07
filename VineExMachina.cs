@@ -4,7 +4,7 @@ using System.Reflection;
 using UnityEngine;
 namespace Vine
 {
-public enum VineCharacterEmotion
+public enum VineCharacterEmotion//TODO remove this and use string?
 {
     Default,
     Smile,
