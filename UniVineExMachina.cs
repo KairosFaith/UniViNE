@@ -5,6 +5,14 @@ using TMPro;
 using Vine;
 using System;
 using System.Collections.Generic;
+public enum UniVineCharacterEmotion
+{
+    neutral,
+    smile,
+    angry,
+    sad,
+    scream,
+}
 public abstract class IUniVineTextBox : MonoBehaviour, IPointerDownHandler
 {
     public TMP_Text MainTextBox;

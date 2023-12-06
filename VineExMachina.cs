@@ -4,14 +4,6 @@ using System.Reflection;
 using UnityEngine;
 namespace Vine
 {
-public enum VineCharacterEmotion//TODO remove this and use string?
-{
-    Default,
-    Smile,
-    Angry,
-    Sad,
-    Scream,
-}
     public interface VinePlayer
     {
         public VineLoader Loader { get; set; }
@@ -33,6 +25,7 @@ public enum VineCharacterEmotion//TODO remove this and use string?
             StoryPlayer = storyPlayer;
         }
         VineStory _Story;
+        Type StoryClass;
         //Data to Save
         string _CurrentPassageName, _JsonSave;
         public Dictionary<string, string> CharacterToSpriteLink = new Dictionary<string, string>();
@@ -40,7 +33,8 @@ public enum VineCharacterEmotion//TODO remove this and use string?
         IEnumerator<VinePassageOutput> _CurrentPassage;
         public void StartStory(string StoryID)
         {
-            _Story = Activator.CreateInstance(Type.GetType(StoryID)) as VineStory;
+            StoryClass = Type.GetType(StoryID);
+            _Story = Activator.CreateInstance(StoryClass) as VineStory;
             LoadPassage(_Story.StartPassage);
         }
         void SaveStory()
@@ -56,7 +50,7 @@ public enum VineCharacterEmotion//TODO remove this and use string?
             var pdata = _Story.FetchPassage(passageName, out string n);
             _CurrentPassageName = passageName;
             _JsonSave = _Story.PackVariables();
-            MethodInfo method = typeof(Prologue).GetMethod(n);
+            MethodInfo method = StoryClass.GetMethod(n);
             var passage = (IEnumerator<VinePassageOutput>)method.Invoke(_Story, null);
             if (pdata.Name.Contains(Interaction))//TODO check passage type
                 InteractionRoutine(passage, pdata);
@@ -208,13 +202,13 @@ public abstract class VinePassageOutput { }
 public class VineLineOutput : VinePassageOutput
 {
     public string Character, Text;
-    public VineCharacterEmotion Emotion;
+    public UniVineCharacterEmotion Emotion;
     public VineLineOutput(string character, string text)
     {
         Character = character;
         Text = text;
     }
-    public VineLineOutput(string character, VineCharacterEmotion emotion, string text)
+    public VineLineOutput(string character, UniVineCharacterEmotion emotion, string text)
     {
         Character = character;
         Text = text;

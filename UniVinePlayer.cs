@@ -37,12 +37,12 @@ public class UniVinePlayer : MonoBehaviour, VinePlayer
     public VineLoader Loader { get; set; }
     AudioSource _CurrentMusicSource;
     Dictionary<string, Sprite> _BackgroundSpritesBank = new Dictionary<string, Sprite>();
-    Dictionary<(string, VineCharacterEmotion), Sprite> _CharacterSpriteBank = new Dictionary<(string, VineCharacterEmotion), Sprite>();
+    Dictionary<(string, UniVineCharacterEmotion), Sprite> _CharacterSpriteBank = new Dictionary<(string, UniVineCharacterEmotion), Sprite>();
     Sprite _LastFetchedPlayerSprite;//for use in interactions
     void Start()//for testing
     {
         Loader = new VineLoader(this);
-        Loader.StartStory(nameof(Prologue));
+        Loader.StartStory("Prologue");
     }
     public void OutputLine(VineLineOutput line)
     {
@@ -88,10 +88,10 @@ public class UniVinePlayer : MonoBehaviour, VinePlayer
         string[] args = characterKeyValuePair.Split('=');
         string spriteID = args[1];
         Loader.CharacterToSpriteLink[args[0]] = args[1];
-        foreach (VineCharacterEmotion emotion in Enum.GetValues(typeof(VineCharacterEmotion)))
+        foreach (UniVineCharacterEmotion emotion in Enum.GetValues(typeof(UniVineCharacterEmotion)))
         {
-            string spriteFileName = spriteID + emotion;
-            Sprite s = Resources.Load<Sprite>(CharacterSprites + "/" + spriteFileName) ?? _CharacterSpriteBank[(spriteID, VineCharacterEmotion.Default)];//if no sprite for emotion, use default
+            string spriteFileName = spriteID + '_' + emotion;
+            Sprite s = Resources.Load<Sprite>(CharacterSprites + "/" + spriteFileName) ?? _CharacterSpriteBank[(spriteID, UniVineCharacterEmotion.neutral)];//if no sprite for emotion, use default
             _CharacterSpriteBank.Add((spriteID, emotion), s);
         }
     }
