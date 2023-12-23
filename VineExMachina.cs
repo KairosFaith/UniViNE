@@ -7,6 +7,7 @@ namespace Vine
     public interface VinePlayer
     {
         public VineLoader Loader { get; set; }
+        public Dictionary<string, Action> SpecialMarks { get; set; }
         public void OutputLine(VineLineOutput line);
         public void ShowTitle(VineHeaderOutput header);
         public VineInteraction PlayInteraction(VinePassageMetadata metadata);
@@ -33,17 +34,9 @@ namespace Vine
         IEnumerator<VinePassageOutput> _CurrentPassage;
         public void StartStory(string StoryID)
         {
-            StoryClass = Type.GetType(StoryID);
+            StoryClass = Type.GetType(StoryID.RemoveIllegalClassCharacters());
             _Story = Activator.CreateInstance(StoryClass) as VineStory;
             LoadPassage(_Story.StartPassage);
-        }
-        void SaveStory()
-        {
-
-        }
-        void ResumeStory(string StoryID)
-        {
-
         }
         public void LoadPassage(string passageName)
         {
@@ -71,7 +64,10 @@ namespace Vine
                     StoryPlayer.ShowTitle(header);
                 else if (output is UniVineMarkedOutput mark)
                 {
-                    StoryPlayer.SendMessage(mark.MethodName, mark.Value);
+                    if (StoryPlayer.SpecialMarks.TryGetValue(mark.MethodName, out Action func))
+                        func();
+                    else
+                        StoryPlayer.SendMessage(mark.MethodName, mark.Value);
                     NextLineInPassage();
                 }
                 else if (output is VineLinkOutput link)
@@ -93,34 +89,34 @@ namespace Vine
         }
     }
     public abstract class VineStory
-{
-    public abstract string JSON_Metadata { get; }
-    public string StoryName, StartPassage;
-    public Dictionary<string, VinePassageMetadata> Passages = new Dictionary<string, VinePassageMetadata>();
-    public Dictionary<string, VineVar> Variables = new Dictionary<string, VineVar>();
-    public VineStory()
     {
-        VineStoryMetadata s = JsonUtility.FromJson<VineStoryMetadata>(JSON_Metadata);
-        StartPassage = s.StartPassage;
-        StoryName = s.StoryName;
-        VinePassageMetadata[] p = s.Data;
-        foreach (var metadataItem in p)
-            Passages.Add(metadataItem.Name, metadataItem);
-    }
-    public VinePassageMetadata FetchPassage(string passageName, out string functionName)
-    {
-        if(Passages.TryGetValue(passageName, out VinePassageMetadata metadata))
+        public abstract string StoryName { get; }
+        public abstract string StartPassage { get; }
+        public abstract Dictionary<string, VinePassageMetadata> Passages { get; }
+        public Dictionary<string, VineVar> Variables = new Dictionary<string, VineVar>();
+        //public VineStory()
+        //{
+        //    VineStoryMetadata s = JsonUtility.FromJson<VineStoryMetadata>(JSON_Metadata);
+        //    StartPassage = s.StartPassage;
+        //    StoryName = s.StoryName;
+        //    VinePassageMetadata[] p = s.Data;
+        //    foreach (var metadataItem in p)
+        //        Passages.Add(metadataItem.Name, metadataItem);
+        //}
+        public VinePassageMetadata FetchPassage(string passageName, out string functionName)
         {
-            functionName = $"Passage{metadata.ID}";
-            return metadata;
+            if(Passages.TryGetValue(passageName, out VinePassageMetadata metadata))
+            {
+                functionName = $"Passage{metadata.ID}";
+                return metadata;
+            }
+            throw new Exception($"Passage {passageName} not found");
         }
-        throw new Exception($"Passage {passageName} not found");
-    }
         public string PackVariables()
         {
             return JsonUtility.ToJson(Variables);
         }
-}
+    }
     public struct VineVar
     {
         object data;
@@ -184,69 +180,81 @@ namespace Vine
                 return (string)v + f;
         }
     }
-[Serializable]
-public class VineStoryMetadata
-{
-    public string StoryName;
-    public string StartPassage;
-    public VinePassageMetadata[] Data;
-}
-[Serializable]
-public class VinePassageMetadata
-{
-    public string Name;
-    public int ID;
-    public string[] Tags;
-}
-public abstract class VinePassageOutput { }
-public class VineLineOutput : VinePassageOutput
-{
-    public string Character, Text;
-    public UniVineCharacterEmotion Emotion;
-    public VineLineOutput(string character, string text)
+    [Serializable]
+    public class VineStoryMetadata
     {
-        Character = character;
-        Text = text;
+        public string StoryName;
+        public string StartPassage;
+        public VinePassageMetadata[] Data;
     }
-    public VineLineOutput(string character, UniVineCharacterEmotion emotion, string text)
+    [Serializable]
+    public class VinePassageMetadata
     {
-        Character = character;
-        Text = text;
-        Emotion = emotion;
+        public string Name;
+        public int ID;
+        public string[] Tags;
+        public VinePassageMetadata(string name, int id, params string[] tags)
+        {
+            Name = name;
+            ID = id;
+            Tags = tags;
+        }
+        public VinePassageMetadata(string name, int id)
+        {
+            Name = name;
+            ID = id;
+        }
+        public VinePassageMetadata() { }//C# nonsense
     }
-}
-[Serializable]
-public class VineLinkOutput : VinePassageOutput
-{
-    public string TextClick, PassageName;
-    public VineLinkOutput(string passageName)
+    public abstract class VinePassageOutput { }
+    public class VineLineOutput : VinePassageOutput
     {
-        TextClick = PassageName = passageName;
+        public string Character, Text;
+        public UniVineCharacterEmotion Emotion;
+        public VineLineOutput(string character, string text)
+        {
+            Character = character;
+            Text = text;
+        }
+        public VineLineOutput(string character, UniVineCharacterEmotion emotion, string text)
+        {
+            Character = character;
+            Text = text;
+            Emotion = emotion;
+        }
     }
-    public VineLinkOutput(string textClick,string passageName)
+    [Serializable]
+    public class VineLinkOutput : VinePassageOutput
     {
-        TextClick = textClick;
-        PassageName = passageName;
+        public string TextClick, PassageName;
+        public VineLinkOutput(string passageName)
+        {
+            TextClick = PassageName = passageName;
+        }
+        public VineLinkOutput(string textClick,string passageName)
+        {
+            TextClick = textClick;
+            PassageName = passageName;
+        }
+        public VineLinkOutput(){ } //nonsense
     }
-    public VineLinkOutput(){ } //nonsense
-}
-public class VineHeaderOutput : VinePassageOutput
-{
-    public string Header, Body;
-    public VineHeaderOutput(string header, string body)
+    public class VineHeaderOutput : VinePassageOutput
     {
-        Header = header;
-        Body = body;
+        public string Header, Body;
+        public VineHeaderOutput(string header, string body)
+        {
+            Header = header;
+            Body = body;
+        }
     }
-}
-public class VineDelayLinkOutput : VineLinkOutput
-{
-    public float Delay;
-    public VineDelayLinkOutput(float delay, string passageName)
+    public class VineDelayLinkOutput : VineLinkOutput
     {
-        Delay = delay;
-        PassageName = passageName;
+        public float Delay;
+        public VineDelayLinkOutput(float delay, string passageName)
+        {
+            Delay = delay;
+            PassageName = passageName;
+        }
+        public VineDelayLinkOutput() { }//C# nonsense 
     }
-    public VineDelayLinkOutput() { }//C# nonsense 
-}
 }

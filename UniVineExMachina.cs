@@ -79,8 +79,14 @@ public abstract class IUniVineTextBox : MonoBehaviour, IPointerDownHandler
 }
 public class UniVineMarkedOutput : VinePassageOutput
 {
-    public string MethodName, Value;
-    public UniVineMarkedOutput(string methodName, string value)
+    public string MethodName;
+    public object Value;
+    public UniVineMarkedOutput(string methodName, object value = null)
+    {
+        MethodName = methodName;
+        Value = value;
+    }
+    public UniVineMarkedOutput(string methodName, params object[] value)
     {
         MethodName = methodName;
         Value = value;

@@ -1,4 +1,3 @@
-using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using Vine;
@@ -13,14 +12,12 @@ public class TwisonExtractor : MonoBehaviour
     void Start()
     {
         twisonStory rawstory = JsonUtility.FromJson<twisonStory>(TwisonOutput);
-        VineStoryMetadata metadata = new VineStoryMetadata();
-        metadata.StoryName = rawstory.name;
         twisonPassage[] arrayOfRawPassages = rawstory.passages;
         int numberOfPassages = arrayOfRawPassages.Length;
         List<VinePassageMetadata> listOfPassageMetadata = new List<VinePassageMetadata>();
-            //id mismatch, use list instead, add to list then convert to array
         int startnode = rawstory.startnode;
         Dictionary<int, string> rawPassageTexts = new Dictionary<int, string>();
+        string startPassageName = string.Empty;
         foreach (twisonPassage passage in arrayOfRawPassages)
         {
             VinePassageMetadata passageMetadata = new VinePassageMetadata();
@@ -32,44 +29,43 @@ public class TwisonExtractor : MonoBehaviour
             listOfPassageMetadata.Add(passageMetadata);
             rawPassageTexts[passageID] = passage.text;
             if (passageID == startnode)
-                metadata.StartPassage = passageName;
+                startPassageName = passageName;
         }
-        metadata.Data = listOfPassageMetadata.ToArray();
-        string className = metadata.StoryName;
-        //remove illegal characters from class name using regex
-        className = Regex.Replace(className, "[^a-zA-Z0-9_]+", "", RegexOptions.Compiled);
-        //TODO I want to go and learn regex
-
-        //create file
+        string className = rawstory.name.RemoveIllegalClassCharacters();
         string path = Application.dataPath + $"/CodeStory/{className}.cs";
         File.AppendAllText(path, "using System.Collections.Generic;\nusing Vine;\n");
         File.AppendAllText(path, $"public class {className} : VineStory\n{{\n");
-        //front string
-
-        //TODO double check this, need testing
-        JSON_Metadata = JsonUtility.ToJson(metadata,true);
-        File.AppendAllText(path, $"public override string JSON_Metadata =>");
-        string[] lines = JSON_Metadata.Split(new[] { "\n" }, StringSplitOptions.None);
-        foreach (string line in lines)
+        //create file
+        File.AppendAllText(path, $"public override string StoryName => \"{rawstory.name}\";\n");
+        File.AppendAllText(path, $"public override string StartPassage => \"{startPassageName}\";\n");
+        File.AppendAllText(path, "public override Dictionary<string, VinePassageMetadata> Passages => new Dictionary<string, VinePassageMetadata>() {\n");
+        foreach (VinePassageMetadata metadata in listOfPassageMetadata)
         {
-            string processedLine = line.Replace("\"", "\\\"");
-            File.AppendAllText(path, "\"" + processedLine + "\"" + "+\n");
+            string tagsField = string.Empty;
+            if (metadata.Tags != null)
+            {
+                tagsField = ", Tags = new string[] {";
+                foreach (string tag in metadata.Tags)
+                    tagsField += $"\"{tag}\",";
+                tagsField += "}";
+            }
+            string lineToWrite = $"{{\"{metadata.Name}\", new VinePassageMetadata(){{ Name = \"{metadata.Name}\", ID = {metadata.ID} {tagsField} }} }},\n";
+            File.AppendAllText(path, lineToWrite);
         }
-        File.AppendAllText(path, "\"\";\n");
+        File.AppendAllText(path, "};\n");
         for (int i = 1; i <= numberOfPassages; i++)
         {
-            string passageName = metadata.Data[i - 1].Name;//id mismatch
+            string passageName = listOfPassageMetadata[i - 1].Name;//id mismatch
             string passageText = ProcessRawPassageOutput(rawPassageTexts[i]);
-            string passageFunction = $"public IEnumerator<VinePassageOutput> Passage{i}()//{passageName}\n{{\n{passageText}\n}}";
+            string passageFunction = $"public IEnumerator<VinePassageOutput> Passage{i}()//{passageName}\n{{\n{passageText}\n}}\n";
             File.AppendAllText(path, passageFunction);
         };
         File.AppendAllText(path, "}");
     }
-    string ProcessRawPassageOutput(string rawPassageText)
+    string ProcessRawPassageOutput(string rawPassageText)//Regex this shit
     {
         string[] rawLines = rawPassageText.Split(new[] { "\n" }, StringSplitOptions.None);
         string processedPassageText = "";
-        //foreach (string rawLine in rawLines)
         for(int i = 0;i<rawLines.Length;i++)
         {
             string rawLine = rawLines[i];
@@ -125,9 +121,14 @@ public class TwisonExtractor : MonoBehaviour
             {
                 string curLine = rawLine;
                 //split by : and remove the space
+                curLine = FilterItalic(curLine);
+                curLine = FilterColorTag(curLine);
                 string[] parts = curLine.Split(':');
                 string character = parts[0].Trim();
-                string text = parts[1].Trim();
+
+                string text = string.Empty;
+                for(int j = 1; j<parts.Length;j++)
+                    text += parts[j].Trim();
                 //check for emotion
                 if (character.Contains("(") && character.Contains(")"))
                 {
@@ -145,6 +146,26 @@ public class TwisonExtractor : MonoBehaviour
         }
             //processedPassageText += ProcessRawLine(rawLine) + "\n";
         return processedPassageText;
+    }
+    public string FilterItalic(string input)//from ChatGPT
+    {
+        // Define the regular expression pattern
+        // Create a Regex object
+        Regex regex = new Regex(@"\/\/([^\/]+)\/\/");
+        // Use Regex.Replace to replace the matched pattern with the HTML italic tags
+        string result = regex.Replace(input, "<i>$1</i>");
+        return result;
+    }
+    public string FilterColorTag(string input)
+    {
+        // Define the regular expression pattern
+        // Create a Regex object
+        Regex regex = new Regex(@"\(\s*text-colour\s*:\s*([^\)]+)\)\[([^\]]+)\]");
+
+        // Use Regex.Replace to replace the matched pattern with the HTML color tags
+        string result = regex.Replace(input, "<color=$1>$2</color>");
+
+        return result;
     }
 }
 [Serializable]

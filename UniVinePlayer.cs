@@ -18,11 +18,12 @@ public class UniVinePlayer : MonoBehaviour, VinePlayer
         if (Instance == this)
         Instance = null;
     }
-    const string//folder names
+    const string
         Narration = "Narration",
+        //folder names
         CharacterSprites = "CharacterSprites",
-        Backgrounds = "Backgrounds",
-        Music = "Music";
+        BackgroundsFolder = "Backgrounds",
+        MusicFolder = "Music";
     //Slash = "/";
     public float LetterRate = .1f, BoxOpenCloseRate = .1f, BackgroundShiftRate;
     public AudioMixerGroup MusicChannel;
@@ -35,12 +36,18 @@ public class UniVinePlayer : MonoBehaviour, VinePlayer
     public UniVinePortraitFrame PortraitFramePrefab;
     public UniVineTitleFrame TitleFramePrefab;
     public VineLoader Loader { get; set; }
+    public Dictionary<string, Action> SpecialMarks { get; set; }
     AudioSource _CurrentMusicSource;
     Dictionary<string, Sprite> _BackgroundSpritesBank = new Dictionary<string, Sprite>();
     Dictionary<(string, UniVineCharacterEmotion), Sprite> _CharacterSpriteBank = new Dictionary<(string, UniVineCharacterEmotion), Sprite>();
     Sprite _LastFetchedPlayerSprite;//for use in interactions
     void Start()//for testing
     {
+        SpecialMarks = new Dictionary<string, Action>
+        {
+            { "//Detective Score Up!//", () => print("Detective Score Up!") }
+        };
+
         Loader = new VineLoader(this);
         Loader.StartStory("Prologue");
     }
@@ -95,14 +102,22 @@ public class UniVinePlayer : MonoBehaviour, VinePlayer
             _CharacterSpriteBank.Add((spriteID, emotion), s);
         }
     }
-    public void SetBackground(string id)
+    public void Background(string id)
     {
         if (_BackgroundSpritesBank.TryGetValue(id, out Sprite bg))
             BackgroundDisplay.sprite = bg;
         else
             BackgroundDisplay.sprite = LoadBackground(id);
     }
-    public void PlayMusic(string id)
+    public void SetBackground(string id)//TODO for receiver, to remove
+    {
+        Background(id);
+    }
+    public void PlayMusic(string id)//TODO for receiver, to remove
+    {
+        Music(id);
+    }
+    public void Music(string id)
     {
         if (_CurrentMusicSource)
         {
@@ -111,7 +126,7 @@ public class UniVinePlayer : MonoBehaviour, VinePlayer
         }
         GameObject go = new GameObject("MusicSource"+id);
         _CurrentMusicSource = go.AddComponent<AudioSource>();
-        _CurrentMusicSource.clip = Resources.Load<AudioClip>(Music+"/" + id);
+        _CurrentMusicSource.clip = Resources.Load<AudioClip>(MusicFolder+"/" + id);
         _CurrentMusicSource.loop = true;
         _CurrentMusicSource.Play();
     }
@@ -130,7 +145,7 @@ public class UniVinePlayer : MonoBehaviour, VinePlayer
     }
     Sprite LoadBackground(string id)
     {
-        Sprite s = Resources.Load<Sprite>(Backgrounds + "/" + id);
+        Sprite s = Resources.Load<Sprite>(BackgroundsFolder + "/" + id);
         _BackgroundSpritesBank.Add(id, s);
         return s;
     }

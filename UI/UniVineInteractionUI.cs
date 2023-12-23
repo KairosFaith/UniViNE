@@ -47,26 +47,7 @@ public class UniVineInteractionUI : MonoBehaviour, VineInteraction
         var t = go.GetComponentInChildren<TMP_Text>();
         t.text = h.TextClick;
         go.onClick.AddListener(()=>OnChoiceMade(h.PassageName));
-        ShuffleChildren(ButtonMount);
-    }
-    void ShuffleChildren(Transform parent)//TODO make this a utility function
-    {
-        int childCount = parent.childCount;
-        List<int> randomBagOfKeys = new List<int>();
-        for (int i = 0; i < childCount; i++)
-            randomBagOfKeys.Add(i);
-        for (int i = 0; i < randomBagOfKeys.Count; i++)
-        {
-            int randomIndex = Random.Range(0, randomBagOfKeys.Count);
-            int randomChildKey = randomBagOfKeys[randomIndex];
-            Transform randomChild = parent.GetChild(randomChildKey);
-            randomBagOfKeys.RemoveAt(randomIndex);
-            int roll = Random.Range(0, 2);
-            if (roll == 0)
-                randomChild.SetAsFirstSibling();
-            else
-                randomChild.SetAsLastSibling();
-        }
+        ButtonMount.ShuffleChildren();
     }
     void SetTimer(VineDelayLinkOutput dlink)
     {
