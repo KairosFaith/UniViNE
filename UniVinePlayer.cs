@@ -109,14 +109,6 @@ public class UniVinePlayer : MonoBehaviour, VinePlayer
         else
             BackgroundDisplay.sprite = LoadBackground(id);
     }
-    public void SetBackground(string id)//TODO for receiver, to remove
-    {
-        Background(id);
-    }
-    public void PlayMusic(string id)//TODO for receiver, to remove
-    {
-        Music(id);
-    }
     public void Music(string id)
     {
         if (_CurrentMusicSource)

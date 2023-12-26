@@ -67,7 +67,7 @@ namespace Vine
                     if (StoryPlayer.SpecialMarks.TryGetValue(mark.MethodName, out Action func))
                         func();
                     else
-                        StoryPlayer.SendMessage(mark.MethodName, mark.Value);
+                        StoryPlayer.SendMessage(mark.MethodName.Trim(), mark.Value);
                     NextLineInPassage();
                 }
                 else if (output is VineLinkOutput link)
