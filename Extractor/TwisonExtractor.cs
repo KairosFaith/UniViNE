@@ -6,7 +6,6 @@ using System;
 using System.Text.RegularExpressions;
 public class TwisonExtractor : MonoBehaviour
 {
-    public string JSON_Metadata;
     [TextArea(0, 100)]
     public string TwisonOutput;
     void Start()
@@ -73,7 +72,7 @@ public class TwisonExtractor : MonoBehaviour
             nomorewhitespace = nomorewhitespace.ToLower();
             if (rawLine.StartsWith("#"))
             {
-                string header = rawLine.Remove(0);//remove the # at the start
+                string header = rawLine.Remove(0,1);//remove the # at the start
                 i++;
                 string body = rawLines[i];
                 processedPassageText += ($"yield return new VineHeaderOutput(\"{header}\", \"{body}\");") + "\n";

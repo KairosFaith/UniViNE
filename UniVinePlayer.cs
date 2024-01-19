@@ -90,7 +90,7 @@ public class UniVinePlayer : MonoBehaviour, VinePlayer
         }
         onDone();//non null
     }
-    public void SetCharacterSprite(string characterKeyValuePair)
+    public void CharacterSprite(string characterKeyValuePair)//call it set??
     {
         string[] args = characterKeyValuePair.Split('=');
         string spriteID = args[1];
@@ -122,7 +122,7 @@ public class UniVinePlayer : MonoBehaviour, VinePlayer
         _CurrentMusicSource.loop = true;
         _CurrentMusicSource.Play();
     }
-    public void SetPlayerCharacter(string characterName)
+    public void PlayerCharacter(string characterName)
     {
         Loader.CurrentPlayerCharacter = characterName;
     }
