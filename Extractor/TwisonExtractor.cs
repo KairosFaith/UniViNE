@@ -8,7 +8,7 @@ public class TwisonExtractor : MonoBehaviour
 {
     [TextArea(0, 100)]
     public string TwisonOutput;
-    void Start()
+    public void Extract()
     {
         twisonStory rawstory = JsonUtility.FromJson<twisonStory>(TwisonOutput);
         twisonPassage[] arrayOfRawPassages = rawstory.passages;
