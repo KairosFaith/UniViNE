@@ -4,7 +4,9 @@ using Vine;
 using System.IO;
 using System;
 using System.Text.RegularExpressions;
-public class TwisonExtractor : MonoBehaviour
+using UnityEditor;
+[CreateAssetMenu(fileName = "TwisonExtractor", menuName = "UniViNE/TwisonExtractor", order = 1)]
+public class TwisonExtractor : ScriptableObject
 {
     [TextArea(0, 100)]
     public string TwisonOutput;
@@ -180,4 +182,17 @@ public class twisonPassage
     public string text, name;
     public int pid;
     public string[] tags;
+}
+[CustomEditor(typeof(TwisonExtractor))]
+public class TwisonExtractorDrawer : Editor
+{
+    public override void OnInspectorGUI()
+    {
+        if (GUILayout.Button("Extract"))
+        {
+            TwisonExtractor extractor = (TwisonExtractor)target;
+            extractor.Extract();
+        }
+        DrawDefaultInspector();
+    }
 }
