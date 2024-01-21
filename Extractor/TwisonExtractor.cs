@@ -85,7 +85,7 @@ public class TwisonExtractor : ScriptableObject
                     Match t = Regex.Match(rawLine, @"\[(.+)\]");
                     string text = t.Groups[1].Value;
                     text = text.Replace(",", "\",\"");
-                    processedPassageText += ($"yield return new {nameof(UniVineMarkedOutput)}(\"{text}\");") + "\n";
+                    processedPassageText += $"yield return new {nameof(UniVineMarkedOutput)}(\"{text}\");" + "\n";
                 }
                 else if (IsDelayedLink(rawLine))
                 {
@@ -124,6 +124,7 @@ public class TwisonExtractor : ScriptableObject
                     curLine = curLine.Replace(": ", "\",\"");
                     processedPassageText += ($"yield return new {nameof(VineLineOutput)}(\"{curLine}\");") + "\n";
                 }
+                //TODO auto trim text or expect whitespace after :
             }
             else throw new Exception("Unrecognized line: " + rawLine);
         }
@@ -132,7 +133,7 @@ public class TwisonExtractor : ScriptableObject
     #region REGEX Functions
     bool IsMacro(string input)
     {
-        return Regex.IsMatch(input, @"^\(\w+(-?\w):.*\)");
+        return Regex.IsMatch(input, @"^\(\w+-?\w+:.*\)");
     }
     bool IsMarkedOutputText(string input)
     {
