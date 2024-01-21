@@ -122,9 +122,10 @@ public class TwisonExtractor : ScriptableObject
                 else
                 {
                     curLine = curLine.Replace(": ", "\",\"");
+                    //curLine = curLine.Replace(":", "\",\"");
+                    //TODO auto trim text or expect whitespace after :
                     processedPassageText += ($"yield return new {nameof(VineLineOutput)}(\"{curLine}\");") + "\n";
                 }
-                //TODO auto trim text or expect whitespace after :
             }
             else throw new Exception("Unrecognized line: " + rawLine);
         }
