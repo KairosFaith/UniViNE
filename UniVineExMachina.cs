@@ -5,14 +5,6 @@ using TMPro;
 using Vine;
 using System;
 using System.Collections.Generic;
-public enum UniVineCharacterEmotion
-{
-    neutral,
-    smile,
-    angry,
-    sad,
-    scream,
-}
 public abstract class IUniVineTextBox : MonoBehaviour, IPointerDownHandler
 {
     public TMP_Text MainTextBox;
@@ -75,20 +67,5 @@ public abstract class IUniVineTextBox : MonoBehaviour, IPointerDownHandler
     public void OnPointerDown(PointerEventData eventData)
     {
         _Pressed = true;
-    }
-}
-public class UniVineMarkedOutput : VinePassageOutput
-{
-    public string MethodName;
-    public object Value;
-    public UniVineMarkedOutput(string methodName, object value = null)
-    {
-        MethodName = methodName;
-        Value = value;
-    }
-    public UniVineMarkedOutput(string methodName, params object[] value)
-    {
-        MethodName = methodName;
-        Value = value;
     }
 }

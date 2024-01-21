@@ -13,6 +13,10 @@ public class TwisonExtractor : ScriptableObject
     public void Extract()
     {
         twisonStory rawstory = JsonUtility.FromJson<twisonStory>(TwisonOutput);
+        string className = rawstory.name.RemoveIllegalClassCharacters();
+        string path = Application.dataPath + $"/CodeStory/{className}.cs";
+        if (File.Exists(path))
+            File.Delete(path);
         twisonPassage[] arrayOfRawPassages = rawstory.passages;
         int numberOfPassages = arrayOfRawPassages.Length;
         List<VinePassageMetadata> listOfPassageMetadata = new List<VinePassageMetadata>();
@@ -32,13 +36,10 @@ public class TwisonExtractor : ScriptableObject
             if (passageID == startnode)
                 startPassageName = passageName;
         }
-        string className = rawstory.name.RemoveIllegalClassCharacters();
-        string path = Application.dataPath + $"/CodeStory/{className}.cs";
         File.AppendAllText(path, "using System.Collections.Generic;\nusing Vine;\n");
-        File.AppendAllText(path, $"public class {className} : VineStory\n{{\n");
-        //create file
-        File.AppendAllText(path, $"public override string StoryName => \"{rawstory.name}\";\n");
-        File.AppendAllText(path, $"public override string StartPassage => \"{startPassageName}\";\n");
+        File.AppendAllText(path, $"public class {className} : {nameof(VineStory)}\n{{\n");
+        File.AppendAllText(path, $"public override string {nameof(VineStory.StoryName)} => \"{rawstory.name}\";\n");
+        File.AppendAllText(path, $"public override string {nameof(VineStory.StartPassage)} => \"{startPassageName}\";\n");
         File.AppendAllText(path, "public override Dictionary<string, VinePassageMetadata> Passages => new Dictionary<string, VinePassageMetadata>() {\n");
         foreach (VinePassageMetadata metadata in listOfPassageMetadata)
         {
@@ -50,7 +51,7 @@ public class TwisonExtractor : ScriptableObject
                     tagsField += $"\"{tag}\",";
                 tagsField += "}";
             }
-            string lineToWrite = $"{{\"{metadata.Name}\", new VinePassageMetadata(){{ Name = \"{metadata.Name}\", ID = {metadata.ID} {tagsField} }} }},\n";
+            string lineToWrite = $"{{\"{metadata.Name}\", new {nameof(VinePassageMetadata)}(){{ Name = \"{metadata.Name}\", ID = {metadata.ID} {tagsField} }} }},\n";
             File.AppendAllText(path, lineToWrite);
         }
         File.AppendAllText(path, "};\n");
@@ -70,55 +71,44 @@ public class TwisonExtractor : ScriptableObject
         for(int i = 0;i<rawLines.Length;i++)
         {
             string rawLine = rawLines[i];
-            string nomorewhitespace = rawLine.Replace(" ", "");
-            nomorewhitespace = nomorewhitespace.ToLower();
-            if (rawLine.StartsWith("#"))
+            if (rawLine.StartsWith("#"))//Check header
             {
                 string header = rawLine.Remove(0,1);//remove the # at the start
                 i++;
                 string body = rawLines[i];
-                processedPassageText += ($"yield return new VineHeaderOutput(\"{header}\", \"{body}\");") + "\n";
+                processedPassageText += ($"yield return new {nameof(VineHeaderOutput)}(\"{header}\", \"{body}\");") + "\n";
             }
-            else if (rawLine.StartsWith("("))
+            else if (IsMacro(rawLine))
             {
-                if (nomorewhitespace.StartsWith("(text-style:\"mark\")"))
+                if (IsMarkedOutputText(rawLine))
                 {
-                    string curLine = rawLine;
-                    int textStart = curLine.IndexOf('[') + 1;
-                    int textEnd = curLine.IndexOf(']');
-                    string text = curLine.Substring(textStart, textEnd - textStart).Trim();
-                    text = text.Replace(",", "\",\"");//gotta put some " " between the ,
-                    processedPassageText += ($"yield return new UniVineMarkedOutput(\"{text}\");") + "\n";
+                    Match t = Regex.Match(rawLine, @"\[.+\]");
+                    string text = t.Value;
+                    text = text.Replace("[", "");
+                    text = text.Replace("]", "");
+                    text = text.Replace(",", "\",\"");
+                    processedPassageText += ($"yield return new {nameof(UniVineMarkedOutput)}(\"{text}\");") + "\n";
                 }
-                //is event macro
-                else if (rawLine.StartsWith("(event:whentime>"))
+                else if (IsDelayedLink(rawLine))
                 {
-                    //remove (event:whentime> from the front
-                    string curLine = rawLine;
-                    int textStart = curLine.IndexOf("(event:whentime>") + 16;
-                    int textEnd = curLine.Length - 1;
-                    string text = curLine.Substring(textStart, textEnd - textStart).Trim();
-
-                    //check for float or int value in front
-                    string[] parts = text.Split('s');
-                    string time = parts[0];
-
-                    //check for event name (go-to: 
-                    string eventName = parts[1].Substring(6);
-                    processedPassageText += ($"yield return new VineEventOutput({time}f, \"{eventName}\");") + "\n";
+                    Match matchPassageName = Regex.Match(rawLine, "\".+\"", RegexOptions.IgnoreCase);
+                    string passageName = matchPassageName.Value.Replace("\"","");
+                    Match matchDurationInSeconds = Regex.Match(rawLine, @"(|\d*\.)\d+s", RegexOptions.IgnoreCase);
+                    string time = matchDurationInSeconds.Value.Replace("s", "f");
+                    processedPassageText += $"yield return new {nameof(VineDelayLinkOutput)}({time}, \"{passageName}\");" + "\n";
                 }
+                else
+                    Debug.LogWarning("Unrecognized macro: " + rawLine);
             }
-            else if (nomorewhitespace.StartsWith("[[") && nomorewhitespace.EndsWith("]]"))
+            else if (IsLink(rawLine))
             {
-                //passage link
-                string curLine = rawLine;
-                int textStart = curLine.IndexOf("[[") + 2;
-                int textEnd = curLine.IndexOf("]]");
-                string text = curLine.Substring(textStart, textEnd - textStart).Trim();
+                string text = rawLine;
+                text = text.Replace("[[", "");
+                text = text.Replace("]]", "");
                 text = text.Replace("|", "\",\"");
-                processedPassageText += ($"yield return new VineLinkOutput(\"{text}\");") + "\n";
+                processedPassageText += ($"yield return new {nameof(VineLinkOutput)}(\"{text}\");") + "\n";
             }
-            else if (rawLine.Contains(":"))
+            else if (rawLine.Contains(":"))//assume it's a dialogue line
             {
                 string curLine = rawLine;
                 //split by : and remove the space
@@ -136,11 +126,11 @@ public class TwisonExtractor : ScriptableObject
                     string emotion = character.Substring(character.IndexOf("(") + 1, character.IndexOf(")") - character.IndexOf("(") - 1);
                     emotion = emotion.ToLower();
                     character = character.Substring(0, character.IndexOf("(")).Trim();//check this
-                    processedPassageText += ($"yield return new VineLineOutput(\"{character}\", UniVineCharacterEmotion.{emotion}, \"{text}\");") + "\n";//TODO use enum or string?
+                    processedPassageText += ($"yield return new {nameof(VineLineOutput)}(\"{character}\", {nameof(VineCharacterEmotion)}.{emotion}, \"{text}\");") + "\n";//TODO use enum or string?
                 }
                 else
                 {
-                    processedPassageText += ($"yield return new VineLineOutput(\"{character}\", \"{text}\");") + "\n";
+                    processedPassageText += ($"yield return new {nameof(VineLineOutput)}(\"{character}\", \"{text}\");") + "\n";
                 }
             }
             else throw new Exception("Unrecognized line: " + rawLine);
@@ -148,6 +138,33 @@ public class TwisonExtractor : ScriptableObject
             //processedPassageText += ProcessRawLine(rawLine) + "\n";
         return processedPassageText;
     }
+    
+    
+    //REGEX Functions
+    bool IsMacro(string input)
+    {
+        return Regex.IsMatch(input, @"^\(\w+(-?\w):.*\)");
+    }
+    bool IsMarkedOutputText(string input)
+    {
+        return Regex.IsMatch(input, "^\\(text-style: *\"mark\" *\\)", RegexOptions.IgnoreCase);
+    }
+    bool IsDelayedLink(string input)
+    {
+        if(IsDelayedEvent(input))
+            return Regex.IsMatch(input, "\\(go-to: *\".+\" *\\)", RegexOptions.IgnoreCase);//assume go-to macro will not be used for any other purpose
+        return false;
+    }
+    bool IsDelayedEvent(string input)
+    {
+        return Regex.IsMatch(input, @"^\(event: *when +time *>=? *[\d*|.]\d*s *\)\[(=|\]$)", RegexOptions.IgnoreCase);
+    }
+    bool IsLink(string input)
+    {
+        return Regex.IsMatch(input, @"^(\[\[).*(\]\])$");
+    }
+    
+    
     public string FilterItalic(string input)//from ChatGPT
     {
         // Define the regular expression pattern
@@ -192,6 +209,7 @@ public class TwisonExtractorDrawer : Editor
         {
             TwisonExtractor extractor = (TwisonExtractor)target;
             extractor.Extract();
+            //EditorUtility.
         }
         DrawDefaultInspector();
     }

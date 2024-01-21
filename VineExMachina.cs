@@ -4,6 +4,14 @@ using System.Reflection;
 using UnityEngine;
 namespace Vine
 {
+    public enum VineCharacterEmotion
+    {
+        neutral,
+        smile,
+        angry,
+        sad,
+        scream,
+    }
     public interface VinePlayer
     {
         public VineLoader Loader { get; set; }
@@ -210,13 +218,13 @@ namespace Vine
     public class VineLineOutput : VinePassageOutput
     {
         public string Character, Text;
-        public UniVineCharacterEmotion Emotion;
+        public VineCharacterEmotion Emotion;
         public VineLineOutput(string character, string text)
         {
             Character = character;
             Text = text;
         }
-        public VineLineOutput(string character, UniVineCharacterEmotion emotion, string text)
+        public VineLineOutput(string character, VineCharacterEmotion emotion, string text)
         {
             Character = character;
             Text = text;
@@ -256,5 +264,20 @@ namespace Vine
             PassageName = passageName;
         }
         public VineDelayLinkOutput() { }//C# nonsense 
+    }
+    public class UniVineMarkedOutput : VinePassageOutput
+    {
+        public string MethodName;
+        public object Value;
+        public UniVineMarkedOutput(string methodName, object value = null)
+        {
+            MethodName = methodName;
+            Value = value;
+        }
+        public UniVineMarkedOutput(string methodName, params object[] value)
+        {
+            MethodName = methodName;
+            Value = value;
+        }
     }
 }
