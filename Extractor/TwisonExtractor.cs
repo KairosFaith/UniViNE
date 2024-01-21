@@ -82,65 +82,54 @@ public class TwisonExtractor : ScriptableObject
             {
                 if (IsMarkedOutputText(rawLine))
                 {
-                    Match t = Regex.Match(rawLine, @"\[.+\]");
-                    string text = t.Value;
-                    text = text.Replace("[", "");
-                    text = text.Replace("]", "");
+                    Match t = Regex.Match(rawLine, @"\[(.+)\]");
+                    string text = t.Groups[1].Value;
                     text = text.Replace(",", "\",\"");
                     processedPassageText += ($"yield return new {nameof(UniVineMarkedOutput)}(\"{text}\");") + "\n";
                 }
                 else if (IsDelayedLink(rawLine))
                 {
-                    Match matchPassageName = Regex.Match(rawLine, "\".+\"", RegexOptions.IgnoreCase);
-                    string passageName = matchPassageName.Value.Replace("\"","");
-                    Match matchDurationInSeconds = Regex.Match(rawLine, @"(|\d*\.)\d+s", RegexOptions.IgnoreCase);
-                    string time = matchDurationInSeconds.Value.Replace("s", "f");
+                    Match t = Regex.Match(rawLine, "^\\(event: *when +time *>=? *(\\d*\\.?\\d)s *\\) *\\[=?\\(go-to: *\"(.+)\"", RegexOptions.IgnoreCase);
+                    GroupCollection m = t.Groups;
+                    string time = m[1].Value;
+                    string passageName = m[1].Value;
                     processedPassageText += $"yield return new {nameof(VineDelayLinkOutput)}({time}, \"{passageName}\");" + "\n";
                 }
                 else
-                    Debug.LogWarning("Unrecognized macro: " + rawLine);
+                    Debug.LogWarning("Unrecognized or unsupported macro: " + rawLine);
             }
             else if (IsLink(rawLine))
             {
-                string text = rawLine;
-                text = text.Replace("[[", "");
-                text = text.Replace("]]", "");
+                Match l = Regex.Match(rawLine, @"^\[\[+(.+)\]+\]$");
+                string text = l.Groups[1].Value;
                 text = text.Replace("|", "\",\"");
                 processedPassageText += ($"yield return new {nameof(VineLinkOutput)}(\"{text}\");") + "\n";
             }
             else if (rawLine.Contains(":"))//assume it's a dialogue line
             {
                 string curLine = rawLine;
-                //split by : and remove the space
-                curLine = FilterItalic(curLine);
-                curLine = FilterColorTag(curLine);
-                string[] parts = curLine.Split(':');
-                string character = parts[0].Trim();
-
-                string text = string.Empty;
-                for(int j = 1; j<parts.Length;j++)
-                    text += parts[j].Trim();
-                //check for emotion
-                if (character.Contains("(") && character.Contains(")"))
+                curLine = ConvertIttalics(curLine);
+                curLine = ConvertColorTag(curLine);
+                if(Regex.IsMatch(curLine, @"^.+\([A-Za-z]\):.+$"))
                 {
-                    string emotion = character.Substring(character.IndexOf("(") + 1, character.IndexOf(")") - character.IndexOf("(") - 1);
-                    emotion = emotion.ToLower();
-                    character = character.Substring(0, character.IndexOf("(")).Trim();//check this
-                    processedPassageText += ($"yield return new {nameof(VineLineOutput)}(\"{character}\", {nameof(VineCharacterEmotion)}.{emotion}, \"{text}\");") + "\n";//TODO use enum or string?
+                    Match t = Regex.Match(curLine, @"^(.+)\(([A-Za-z])\):(.+)$");
+                    GroupCollection m = t.Groups;
+                    string character = m[1].Value;
+                    VineCharacterEmotion emotion = (VineCharacterEmotion)Enum.Parse(typeof(VineCharacterEmotion),m[2].Value);
+                    string text = m[3].Value;
+                    processedPassageText += $"yield return new {nameof(VineLineOutput)}(\"{character}\", {nameof(VineCharacterEmotion)}.{emotion}, \"{text}\");" + "\n";
                 }
                 else
                 {
-                    processedPassageText += ($"yield return new {nameof(VineLineOutput)}(\"{character}\", \"{text}\");") + "\n";
+                    curLine = curLine.Replace(": ", "\",\"");
+                    processedPassageText += ($"yield return new {nameof(VineLineOutput)}(\"{curLine}\");") + "\n";
                 }
             }
             else throw new Exception("Unrecognized line: " + rawLine);
         }
-            //processedPassageText += ProcessRawLine(rawLine) + "\n";
         return processedPassageText;
     }
-    
-    
-    //REGEX Functions
+    #region REGEX Functions
     bool IsMacro(string input)
     {
         return Regex.IsMatch(input, @"^\(\w+(-?\w):.*\)");
@@ -151,39 +140,45 @@ public class TwisonExtractor : ScriptableObject
     }
     bool IsDelayedLink(string input)
     {
-        if(IsDelayedEvent(input))
+        if(IsDelayedEvent(input))//TODO: check if this is the best way to do this
             return Regex.IsMatch(input, "\\(go-to: *\".+\" *\\)", RegexOptions.IgnoreCase);//assume go-to macro will not be used for any other purpose
         return false;
     }
     bool IsDelayedEvent(string input)
     {
-        return Regex.IsMatch(input, @"^\(event: *when +time *>=? *[\d*|.]\d*s *\)\[(=|\]$)", RegexOptions.IgnoreCase);
+        return Regex.IsMatch(input, @"^\(event: *when +time *>=? *\d*\.?\ds *\)\[(=|\]$)", RegexOptions.IgnoreCase);
     }
     bool IsLink(string input)
     {
         return Regex.IsMatch(input, @"^(\[\[).*(\]\])$");
     }
-    
-    
-    public string FilterItalic(string input)//from ChatGPT
+    public string ConvertIttalics(string input)
     {
-        // Define the regular expression pattern
-        // Create a Regex object
-        Regex regex = new Regex(@"\/\/([^\/]+)\/\/");
-        // Use Regex.Replace to replace the matched pattern with the HTML italic tags
-        string result = regex.Replace(input, "<i>$1</i>");
-        return result;
+        string output = input;
+        if(Regex.IsMatch(input, @"//.+//"))
+        {
+            MatchCollection matchCollection = Regex.Matches(input, @"//(.+)//");
+            foreach (Match match in matchCollection)
+                output = output.Replace(match.Value, $"<i>{match.Groups[1].Value}</i>");
+        }
+        return output;
     }
-    public string FilterColorTag(string input)
+    #endregion
+    public string ConvertColorTag(string input)
     {
-        // Define the regular expression pattern
-        // Create a Regex object
-        Regex regex = new Regex(@"\(\s*text-colour\s*:\s*([^\)]+)\)\[([^\]]+)\]");
-
-        // Use Regex.Replace to replace the matched pattern with the HTML color tags
-        string result = regex.Replace(input, "<color=$1>$2</color>");
-
-        return result;
+        string output = input;
+        if (Regex.IsMatch(input, @"^\(text-colour: *[A-Za-z]+ *\) *\[.+\]"))
+        {
+            MatchCollection matchCollection = Regex.Matches(input, @"^\(text-colour: *([A-Za-z]+) *\) *\[(.+)\]");
+            foreach (Match match in matchCollection)
+            {
+                GroupCollection m = match.Groups;
+                string colorTag = m[1].Value;
+                string text = m[2].Value;
+                output = output.Replace(match.Value, $"<color={colorTag}>{text}</color>");
+            }
+        }
+        return output;
     }
 }
 [Serializable]
