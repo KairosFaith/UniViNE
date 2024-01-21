@@ -115,7 +115,7 @@ public class TwisonExtractor : ScriptableObject
                     Match t = Regex.Match(curLine, @"^(.+)\(([A-Za-z])\):(.+)$");
                     GroupCollection m = t.Groups;
                     string character = m[1].Value;
-                    VineCharacterEmotion emotion = (VineCharacterEmotion)Enum.Parse(typeof(VineCharacterEmotion),m[2].Value);
+                    VineCharacterEmotion emotion = (VineCharacterEmotion)Enum.Parse(typeof(VineCharacterEmotion),m[2].Value.ToLower());
                     string text = m[3].Value;
                     processedPassageText += $"yield return new {nameof(VineLineOutput)}(\"{character}\", {nameof(VineCharacterEmotion)}.{emotion}, \"{text}\");" + "\n";
                 }
