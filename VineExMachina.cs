@@ -53,6 +53,7 @@ namespace Vine
             _JsonSave = _Story.PackVariables();
             MethodInfo method = StoryClass.GetMethod(n);
             var passage = (IEnumerator<VinePassageOutput>)method.Invoke(_Story, null);
+            _Story.HistoryPassages.Add(passageName);
             if (pdata.Name.Contains(Interaction))//TODO check passage type
                 InteractionRoutine(passage, pdata);
             else
@@ -101,16 +102,20 @@ namespace Vine
         public abstract string StoryName { get; }
         public abstract string StartPassage { get; }
         public abstract Dictionary<string, VinePassageMetadata> Passages { get; }
-        public Dictionary<string, VineVar> Variables = new Dictionary<string, VineVar>();
-        //public VineStory()
-        //{
-        //    VineStoryMetadata s = JsonUtility.FromJson<VineStoryMetadata>(JSON_Metadata);
-        //    StartPassage = s.StartPassage;
-        //    StoryName = s.StoryName;
-        //    VinePassageMetadata[] p = s.Data;
-        //    foreach (var metadataItem in p)
-        //        Passages.Add(metadataItem.Name, metadataItem);
-        //}
+        public List<string> HistoryPassages = new List<string>();
+        public Dictionary<string, VineVar> StoryVariables = new Dictionary<string, VineVar>();
+        public Dictionary<string, VineVar> Set => StoryVariables;//Store Variables
+        public VineVar Get(string variableName)
+        {
+            if (Set.TryGetValue(variableName, out VineVar v))
+                return v;
+            else
+            {
+                VineVar n = new VineVar();
+                Set.Add(variableName, n);
+                return n;
+            }
+        }
         public VinePassageMetadata FetchPassage(string passageName, out string functionName)
         {
             if(Passages.TryGetValue(passageName, out VinePassageMetadata metadata))
@@ -122,12 +127,12 @@ namespace Vine
         }
         public string PackVariables()
         {
-            return JsonUtility.ToJson(Variables);
+            return JsonUtility.ToJson(Set);
         }
     }
     public struct VineVar
     {
-        object data;
+        public object data;
         public VineVar(object setAs)
         {
             data = setAs;
@@ -148,44 +153,78 @@ namespace Vine
         {
             return new VineVar(value);
         }
-        public static implicit operator string(VineVar v)
+        public override readonly string ToString()//TODO check if readonly is correct
         {
-            Type t = v.data.GetType();
+            if (data == null)
+                return 0.ToString();//return 0 for printing
+            Type t = data.GetType();
             if (t == typeof(int))
             {
-                int i = (int)v.data;
+                int i = (int)data;
                 return i.ToString();
             }
             else if (t == typeof(float))
             {
-                float f = (float)v.data;
+                float f = (float)data;
                 return f.ToString();
             }
             else if (t == typeof(bool))
             {
-                bool b = (bool)v.data;
+                bool b = (bool)data;
                 return b.ToString();
             }
             else if (t == typeof(string))
-                return (string)v.data;
-            else
-                throw new Exception("Variable is of invalid type");
+                return (string)data;
+            return data.ToString();
+        }
+        public static VineVar operator +(VineVar v, string s)
+        {
+            object data = v.data;
+            if(data ==null)
+                return s;
+            return (string)data + s;
         }
         public static VineVar operator +(VineVar v, int i)
         {
+            if(v.data==null)
+                return i;
             Type t = v.data.GetType();
             if (t == typeof(int))
                 return (int)v.data + i;
             else if (t == typeof(float))
                 return (float)v.data + i;
-                return (string)v + i;
+            else if (t == typeof(string))
+                return (string)v.data + i;
+            return i;
         }
         public static VineVar operator +(VineVar v, float f)
         {
+            if (v.data == null)
+                return f;
             Type t = v.data.GetType();
             if (t == typeof(float)|t==typeof(int))
                 return (float)v.data + f;
-                return (string)v + f;
+            return (string)v.data + f;
+        }
+        public static bool operator > (VineVar v, float f)
+        {
+            Type t = v.data.GetType();
+            if (t == typeof(int))
+                return (int)v.data > f;
+            else if (t == typeof(float))
+                return (float)v.data > f;
+            else
+                throw new Exception("Variable is of invalid type");
+        }
+        public static bool operator < (VineVar v, float f)
+        {
+            Type t = v.data.GetType();
+            if (t == typeof(int))
+                return (int)v.data < f;
+            else if (t == typeof(float))
+                return (float)v.data < f;
+            else
+                throw new Exception("Variable is of invalid type");
         }
     }
     [Serializable]

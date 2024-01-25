@@ -84,7 +84,7 @@ public class TwisonExtractor : ScriptableObject
                 {
                     Match t = Regex.Match(rawLine, @"\[(.+)\]");
                     string text = t.Groups[1].Value;
-                    text = text.Replace(",", "\",\"");
+                    text = Regex.Replace(text,", ?", "\",\"");
                     processedPassageText += $"yield return new {nameof(UniVineMarkedOutput)}(\"{text}\");" + "\n";
                 }
                 else if (IsDelayedLink(rawLine))
@@ -110,20 +110,18 @@ public class TwisonExtractor : ScriptableObject
                 string curLine = rawLine;
                 curLine = ConvertIttalics(curLine);
                 curLine = ConvertColorTag(curLine);
-                if(Regex.IsMatch(curLine, @"^.+\([A-Za-z]\):.+$"))
+                if(Regex.IsMatch(curLine, @"^([\w| ]+)\(([A-Za-z]+)\): ?(.+)$"))
                 {
-                    Match t = Regex.Match(curLine, @"^(.+)\(([A-Za-z])\):(.+)$");
+                    Match t = Regex.Match(curLine, @"^([\w| ]+)\(([A-Za-z]+)\): ?(.+)$");
                     GroupCollection m = t.Groups;
                     string character = m[1].Value;
                     VineCharacterEmotion emotion = (VineCharacterEmotion)Enum.Parse(typeof(VineCharacterEmotion),m[2].Value.ToLower());
-                    string text = m[3].Value;
+                    string text = m[3].Value.Trim();
                     processedPassageText += $"yield return new {nameof(VineLineOutput)}(\"{character}\", {nameof(VineCharacterEmotion)}.{emotion}, \"{text}\");" + "\n";
                 }
                 else
                 {
-                    curLine = curLine.Replace(": ", "\",\"");
-                    //curLine = curLine.Replace(":", "\",\"");
-                    //TODO auto trim text or expect whitespace after :
+                    curLine = Regex.Replace(curLine,@": ?", "\",\"");//TODO auto trim text or expect whitespace after :
                     processedPassageText += ($"yield return new {nameof(VineLineOutput)}(\"{curLine}\");") + "\n";
                 }
             }
@@ -169,9 +167,9 @@ public class TwisonExtractor : ScriptableObject
     public string ConvertColorTag(string input)
     {
         string output = input;
-        if (Regex.IsMatch(input, @"^\(text-colour: *[A-Za-z]+ *\) *\[.+\]"))
+        if (Regex.IsMatch(input, @"\(text-colour: *[A-Za-z]+ *\) *\[.+\]"))
         {
-            MatchCollection matchCollection = Regex.Matches(input, @"^\(text-colour: *([A-Za-z]+) *\) *\[(.+)\]");
+            MatchCollection matchCollection = Regex.Matches(input, @"\(text-colour: *([A-Za-z]+) *\) *\[(.+)\]");
             foreach (Match match in matchCollection)
             {
                 GroupCollection m = match.Groups;
