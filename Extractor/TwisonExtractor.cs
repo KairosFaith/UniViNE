@@ -58,25 +58,26 @@ public class TwisonExtractor : ScriptableObject
         for (int i = 1; i <= numberOfPassages; i++)
         {
             string passageName = listOfPassageMetadata[i - 1].Name;//id mismatch
-            string passageText = ProcessRawPassageOutput(rawPassageTexts[i]);
+            string passageText = ProcessRawPassageOutput(rawPassageTexts[i], out _);
             string passageFunction = $"public IEnumerator<VinePassageOutput> Passage{i}()//{passageName}\n{{\n{passageText}\n}}\n";
             File.AppendAllText(path, passageFunction);
         };
         File.AppendAllText(path, "}");
     }
-    string ProcessRawPassageOutput(string rawPassageText)//Regex this shit
+    string ProcessRawPassageOutput(string rawPassageText, out int lineCount)//Regex this shit
     {
         string[] rawLines = rawPassageText.Split(new[] { "\n" }, StringSplitOptions.None);
         string processedPassageText = "";
-        for(int i = 0;i<rawLines.Length;i++)
+        for(lineCount = 0;lineCount<rawLines.Length;)
         {
-            string rawLine = rawLines[i];
+            string rawLine = rawLines[lineCount];
             if (rawLine.StartsWith("#"))//Check header
             {
                 string header = rawLine.Remove(0,1);//remove the # at the start
-                i++;
-                string body = rawLines[i];
+                lineCount++;
+                string body = rawLines[lineCount];
                 processedPassageText += ($"yield return new {nameof(VineHeaderOutput)}(\"{header}\", \"{body}\");") + "\n";
+                lineCount++;
             }
             else if (IsMacro(rawLine))
             {
@@ -86,6 +87,7 @@ public class TwisonExtractor : ScriptableObject
                     string text = t.Groups[1].Value;
                     text = Regex.Replace(text,", ?", "\",\"");
                     processedPassageText += $"yield return new {nameof(UniVineMarkedOutput)}(\"{text}\");" + "\n";
+                    lineCount++;
                 }
                 else if (IsDelayedLink(rawLine))
                 {
@@ -94,9 +96,13 @@ public class TwisonExtractor : ScriptableObject
                     string time = m[1].Value;
                     string passageName = m[1].Value;
                     processedPassageText += $"yield return new {nameof(VineDelayLinkOutput)}({time}, \"{passageName}\");" + "\n";
+                    lineCount++;
                 }
                 else
+                {
                     Debug.LogWarning("Unrecognized or unsupported macro: " + rawLine);
+                    lineCount++;
+                }
             }
             else if (IsLink(rawLine))
             {
@@ -104,6 +110,7 @@ public class TwisonExtractor : ScriptableObject
                 string text = l.Groups[1].Value;
                 text = text.Replace("|", "\",\"");
                 processedPassageText += ($"yield return new {nameof(VineLinkOutput)}(\"{text}\");") + "\n";
+                lineCount++;
             }
             else if (rawLine.Contains(":"))//assume it's a dialogue line
             {
@@ -124,8 +131,13 @@ public class TwisonExtractor : ScriptableObject
                     curLine = Regex.Replace(curLine,@": ?", "\",\"");//TODO auto trim text or expect whitespace after :
                     processedPassageText += ($"yield return new {nameof(VineLineOutput)}(\"{curLine}\");") + "\n";
                 }
+                lineCount++;
             }
-            else throw new Exception("Unrecognized line: " + rawLine);
+            else
+            {
+                lineCount++;
+                throw new Exception("Unrecognized line: " + rawLine);
+            }
         }
         return processedPassageText;
     }

@@ -159,29 +159,35 @@ namespace Vine
                 return b;
             return new VineVar(value);
         }
-        public override readonly string ToString()//TODO check if readonly is correct
+        public static implicit operator bool(VineVar v)
         {
-            if (data == null)
-                return 0.ToString();//return 0 for printing
-            Type t = data.GetType();
-            if (t == typeof(int))
-            {
-                int i = (int)data;
-                return i.ToString();
-            }
+            if (v.data == null)
+                return false;
+            Type t = v.data.GetType();
+            if (t == typeof(bool))
+                return (bool)v.data;
+            else if (t == typeof(int))
+                return (int)v.data != 0;
             else if (t == typeof(float))
-            {
-                float f = (float)data;
-                return f.ToString();
-            }
-            else if (t == typeof(bool))
-            {
-                bool b = (bool)data;
-                return b.ToString();
-            }
+                return (float)v.data != 0;
             else if (t == typeof(string))
-                return (string)data;
-            return data.ToString();
+                return (string)v.data != string.Empty;
+            return true;
+        }
+        public static implicit operator string(VineVar v)
+        {
+            if (v.data == null)
+                return 0.ToString();//return 0 for printing
+            Type t = v.data.GetType();
+            if (t == typeof(string))
+                return (string)v.data;
+            else if (t == typeof(int))
+                return ((int)v.data).ToString();
+            else if (t == typeof(float))
+                return ((float)v.data).ToString();
+            else if (t == typeof(bool))
+                return ((bool)v.data).ToString();
+            return v.data.ToString();
         }
         public static VineVar operator +(VineVar v, string s)
         {
