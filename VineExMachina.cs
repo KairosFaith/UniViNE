@@ -127,7 +127,7 @@ namespace Vine
         }
         public string PackVariables()
         {
-            return JsonUtility.ToJson(Set);
+            return JsonUtility.ToJson(StoryVariables);
         }
     }
     public struct VineVar
@@ -141,16 +141,22 @@ namespace Vine
         {
             return new VineVar(value);
         }
-        public static implicit operator VineVar(string value)
-        {
-            return new VineVar(value);
-        }
         public static implicit operator VineVar(float value)
         {
             return new VineVar(value);
         }
         public static implicit operator VineVar(bool value)
         {
+            return new VineVar(value);
+        }
+        public static implicit operator VineVar(string value)
+        {
+            if(int.TryParse(value, out int i))
+                return i;
+            else if(float.TryParse(value, out float f))
+                return f;
+            else if(bool.TryParse(value, out bool b))
+                return b;
             return new VineVar(value);
         }
         public override readonly string ToString()//TODO check if readonly is correct
