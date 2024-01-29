@@ -38,7 +38,7 @@ public class TwisonExtractor : ScriptableObject
             if (passageID == startnode)
                 startPassageName = passageName;
         }
-        File.AppendAllText(path, "using System.Collections.Generic;\nusing Vine;\nusing System.Linq;\n");
+        File.AppendAllText(path, $"using System.Collections.Generic;\nusing System.Linq;\nusing {nameof(Vine)};//You need the script VineExMachina or nothing will work\n");
         File.AppendAllText(path, $"public class {className} : {nameof(VineStory)}\n{{\n");
         File.AppendAllText(path, $"public override string {nameof(VineStory.StoryName)} => \"{rawstory.name}\";\n");
         File.AppendAllText(path, $"public override string {nameof(VineStory.StartPassage)} => \"{startPassageName}\";\n");
@@ -73,8 +73,8 @@ public class TwisonExtractor : ScriptableObject
         for (int passageLineCount = 0, insertCount = 0 ;passageLineCount<rawLines.Length; passageLineCount++)
         {
             string rawLine = rawLines[passageLineCount];
-            if (Regex.IsMatch(rawLine, @"^\(\w+-?\w+:.*\)"))//TODO use the function?
-            {//Check macro
+            if (Regex.IsMatch(rawLine, @"^\(\w+-?\w+:.*\)"))
+            {//Is Line a Macro?
                 if (Regex.IsMatch(rawLine, @"^\((if|else|elseif):.+\)", RegexOptions.IgnoreCase))
                 {//is branching macro
                     string keyword, conditionBool, codeBlock;
@@ -185,27 +185,39 @@ public class TwisonExtractor : ScriptableObject
                 rawLine = Regex.Replace(rawLine, @"//([^//]+)//", @"<i>$1</i>");
                 rawLine = Regex.Replace(rawLine, @"\(text-colour: *(?<color>[A-Za-z]+) *\) *\[(?<text>.+)\]", @"<color=$1>$2</color>", RegexOptions.ExplicitCapture);
                 //TODO check macro
-                if(Regex.IsMatch(rawLine, @"\((if|else|elseif):.+\) *\[.*\]", RegexOptions.IgnoreCase))//check inline branching
+                if (Regex.IsMatch(rawLine, @"\(\w+-?\w+:.*\)"))
                 {
-                    MatchCollection rawChains = Regex.Matches(rawLine, @"\((if|else|elseif):.+\) *\[.*\]", RegexOptions.IgnoreCase);//capture the whole branch macro chain
-                    foreach (Match chain in rawChains)//for each chain, capture the condition and the code block
+                    if(Regex.IsMatch(rawLine, @"\((if|else|elseif):.+\) *\[.*\]", RegexOptions.IgnoreCase))//check inline branching
                     {
-                        string rawChain = chain.Value;//reprocess the chain to get the condition and code block
-                        MatchCollection macroCollection = Regex.Matches(rawChain, @"\((?<keyword>if|else|elseif):(?<conditionBool>.+)\) *\[(?<codeBlock>[^\[\]]*)\]", RegexOptions.ExplicitCapture | RegexOptions.IgnoreCase);
-                        processedPassageText += $"string insert{insertCount} = string.Empty;\n";//print 1x insert variable for each chain
-                        foreach (Match macroHookPair in macroCollection)
+                        MatchCollection rawChains = Regex.Matches(rawLine, @"\((if|else|elseif):.+\) *\[.*\]", RegexOptions.IgnoreCase);//capture the whole branch macro chain
+                        foreach (Match chain in rawChains)//for each chain, capture the condition and the code block
                         {
-                            GroupCollection macroGroups = macroHookPair.Groups;
-                            string keyword = macroGroups[nameof(keyword)].Value;
-                            string conditionBool = macroGroups[nameof(conditionBool)].Value;
-                            string codeBlock = macroGroups[nameof(codeBlock)].Value;
-                            keyword = ProcessBranchingKeyword(keyword);
-                            conditionBool = ProcessStatement(conditionBool);
-                            codeBlock = ProcessInlineVariable(codeBlock);
-                            processedPassageText += $"{keyword}({conditionBool})\ninsert{insertCount} = \"{codeBlock}\"\n";
+                            string rawChain = chain.Value;//reprocess the chain to get the condition and code block
+                            MatchCollection macroCollection = Regex.Matches(rawChain, @"\((?<keyword>if|else|elseif):(?<conditionBool>.+)\) *\[(?<codeBlock>[^\[\]]*)\]", RegexOptions.ExplicitCapture | RegexOptions.IgnoreCase);
+                            processedPassageText += $"string insert{insertCount} = string.Empty;\n";//print 1x insert variable for each chain
+                            foreach (Match macroHookPair in macroCollection)
+                            {
+                                GroupCollection macroGroups = macroHookPair.Groups;
+                                string keyword = macroGroups[nameof(keyword)].Value;
+                                string conditionBool = macroGroups[nameof(conditionBool)].Value;
+                                string codeBlock = macroGroups[nameof(codeBlock)].Value;
+                                keyword = ProcessBranchingKeyword(keyword);
+                                conditionBool = ProcessStatement(conditionBool);
+                                codeBlock = ProcessInlineVariable(codeBlock);
+                                processedPassageText += $"{keyword}({conditionBool})\ninsert{insertCount} = \"{codeBlock}\"\n";
+                            }
+                            rawLine = rawLine.Replace(rawChain, $"{{insert{insertCount}}}");
+                            insertCount++;
                         }
-                        rawLine = rawLine.Replace(rawChain, $"{{insert{insertCount}}}");
-                        insertCount++;
+                    }
+                    else
+                    {
+                        MatchCollection macroChains = Regex.Matches(rawLine, @"\(\w+-?\w+:.*\)", RegexOptions.IgnoreCase);
+                        foreach (Match chain in macroChains)
+                        {
+                            string rawChain = chain.Value;
+                            rawLine = rawLine.Replace(rawChain, $"{{{ProcessStatement(rawChain)}}}");
+                        }
                     }
                 }
                 rawLine = ProcessInlineVariable(rawLine);
@@ -287,7 +299,7 @@ public class TwisonExtractor : ScriptableObject
         rawStatement = rawStatement.Trim();
         rawStatement = Regex.Replace(rawStatement, @"\$(?<variableName>\w+)", "Get(\"$1\")");
         if (Regex.IsMatch(rawStatement, @"^history: *"))
-            rawStatement = Regex.Replace(rawStatement, @"history: *", "History", RegexOptions.IgnoreCase);
+            rawStatement = Regex.Replace(rawStatement, @"^history: *", "History", RegexOptions.IgnoreCase);
         if (Regex.IsMatch(rawStatement, @"where +its +name", RegexOptions.IgnoreCase))
         {
             MatchCollection matchCollection = Regex.Matches(rawStatement, @" *where +its +name(?<lambdaStatement>.+)", RegexOptions.IgnoreCase);
@@ -314,6 +326,8 @@ public class TwisonExtractor : ScriptableObject
                     rawStatement = "!" + rawStatement;
             }
         }
+        if(Regex.IsMatch(rawStatement, @"^either:(.+)", RegexOptions.IgnoreCase))
+            rawStatement = Regex.Replace(rawStatement, @"^either:(.+)", "Either($1)", RegexOptions.IgnoreCase);
         return rawStatement;
     }
 }

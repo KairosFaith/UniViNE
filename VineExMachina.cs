@@ -15,6 +15,7 @@ namespace Vine
     {
         public VineLoader Loader { get; set; }
         public Dictionary<string, Action> SpecialMarks { get; set; }
+        public Dictionary<string, VineVar> InGameVariables { get; set; }
         public void OutputLine(VineLineOutput line);
         public void ShowTitle(VineHeaderOutput header);
         public VineInteraction PlayInteraction(VinePassageMetadata metadata);
@@ -27,7 +28,7 @@ namespace Vine
     public class VineLoader
     {
         const string Interaction = "Interaction";
-        public VinePlayer StoryPlayer;
+        public VinePlayer StoryPlayer { get; set; }
         public VineLoader(VinePlayer storyPlayer)
         {
             StoryPlayer = storyPlayer;
@@ -43,6 +44,7 @@ namespace Vine
         {
             StoryClass = Type.GetType(StoryID.RemoveIllegalClassCharacters());
             _Story = Activator.CreateInstance(StoryClass) as VineStory;
+            _Story.StoryPlayer = StoryPlayer;
             LoadPassage(_Story.StartPassage);
         }
         public void LoadPassage(string passageName)
@@ -95,17 +97,20 @@ namespace Vine
     }
     public abstract class VineStory
     {
+        public VinePlayer StoryPlayer { get; set; }
         public abstract string StoryName { get; }
         public abstract string StartPassage { get; }
         public abstract Dictionary<string, VinePassageMetadata> Passages { get; }
         public List<string> History = new List<string>();
         public Dictionary<string, VineVar> StoryVariables = new Dictionary<string, VineVar>();
+        public Dictionary<string, VineVar> InGameVariables => StoryPlayer.InGameVariables;
         public Dictionary<string, VineVar> Set => StoryVariables;//Store Variables
         public VineVar Get(string variableName)
         {
             if (Set.TryGetValue(variableName, out VineVar v))
                 return v;
-            //TODO try get value from dictionary in Loader or Player
+            else if(InGameVariables.TryGetValue(variableName, out VineVar v2))
+                return v2;
             else
             {
                 VineVar n = new VineVar();
@@ -126,6 +131,13 @@ namespace Vine
         {
             return UnityEngine.JsonUtility.ToJson(StoryVariables);
         }
+        #region Macro Functions
+        protected object Either(params object[] args)
+        {
+            Random r = new Random();
+            return args[r.Next(args.Length)];
+        }
+        #endregion
     }
     public struct VineVar
     {
@@ -154,7 +166,10 @@ namespace Vine
                 return f;
             else if(bool.TryParse(value, out bool b))
                 return b;
-            return new VineVar(value);
+            else if(value == string.Empty)
+                return new VineVar();
+            else
+                return new VineVar(value);
         }
         public static implicit operator bool(VineVar v)
         {

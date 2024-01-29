@@ -37,6 +37,7 @@ public class UniVinePlayer : MonoBehaviour, VinePlayer
     public UniVineTitleFrame TitleFramePrefab;
     public VineLoader Loader { get; set; }
     public Dictionary<string, Action> SpecialMarks { get; set; }
+    public Dictionary<string, VineVar> InGameVariables { get => throw new NotImplementedException(); set => throw new NotImplementedException(); }
     AudioSource _CurrentMusicSource;
     Dictionary<string, Sprite> _BackgroundSpritesBank = new Dictionary<string, Sprite>();
     Dictionary<(string, VineCharacterEmotion), Sprite> _CharacterSpriteBank = new Dictionary<(string, VineCharacterEmotion), Sprite>();
