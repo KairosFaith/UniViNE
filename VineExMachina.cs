@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Reflection;
-using UnityEngine;
 namespace Vine
 {
     public enum VineCharacterEmotion
@@ -19,7 +18,7 @@ namespace Vine
         public void OutputLine(VineLineOutput line);
         public void ShowTitle(VineHeaderOutput header);
         public VineInteraction PlayInteraction(VinePassageMetadata metadata);
-        public void SendMessage(string methodName, object value = null, SendMessageOptions options = SendMessageOptions.RequireReceiver);
+        public void SendMessage(string methodName, object value = null, UnityEngine.SendMessageOptions options = UnityEngine.SendMessageOptions.RequireReceiver);
     }
     public interface VineInteraction
     {
@@ -48,12 +47,12 @@ namespace Vine
         }
         public void LoadPassage(string passageName)
         {
-            var pdata = _Story.FetchPassage(passageName, out string n);
+            VinePassageMetadata pdata = _Story.FetchPassage(passageName, out string n);
             _CurrentPassageName = passageName;
             _JsonSave = _Story.PackVariables();
             MethodInfo method = StoryClass.GetMethod(n);
             var passage = (IEnumerator<VinePassageOutput>)method.Invoke(_Story, null);
-            _Story.HistoryPassages.Add(passageName);
+            _Story.History.Add(passageName);
             if (pdata.Name.Contains(Interaction))//TODO check passage type
                 InteractionRoutine(passage, pdata);
             else
@@ -82,13 +81,10 @@ namespace Vine
                 else if (output is VineLinkOutput link)
                     LoadPassage(link.PassageName);
                 else
-                    Debug.LogError("Unknown output type");
+                    throw new SystemException("Unknown output type");
             }
             else
-            {
-                _CurrentPassage = null;//TODO????
-                Debug.Log("End of passage");
-            }
+                StoryPlayer.SendMessage("OnPassageEnd", UnityEngine.SendMessageOptions.DontRequireReceiver);
         }
         void InteractionRoutine(IEnumerator<VinePassageOutput> passage, VinePassageMetadata metadata)
         {
@@ -102,13 +98,14 @@ namespace Vine
         public abstract string StoryName { get; }
         public abstract string StartPassage { get; }
         public abstract Dictionary<string, VinePassageMetadata> Passages { get; }
-        public List<string> HistoryPassages = new List<string>();
+        public List<string> History = new List<string>();
         public Dictionary<string, VineVar> StoryVariables = new Dictionary<string, VineVar>();
         public Dictionary<string, VineVar> Set => StoryVariables;//Store Variables
         public VineVar Get(string variableName)
         {
             if (Set.TryGetValue(variableName, out VineVar v))
                 return v;
+            //TODO try get value from dictionary in Loader or Player
             else
             {
                 VineVar n = new VineVar();
@@ -127,7 +124,7 @@ namespace Vine
         }
         public string PackVariables()
         {
-            return JsonUtility.ToJson(StoryVariables);
+            return UnityEngine.JsonUtility.ToJson(StoryVariables);
         }
     }
     public struct VineVar
