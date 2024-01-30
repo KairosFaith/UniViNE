@@ -160,11 +160,12 @@ namespace Vine
         }
         public static implicit operator VineVar(string value)
         {
-            if(int.TryParse(value, out int i))
+            string valueTrimmed = value.Trim();
+            if(int.TryParse(valueTrimmed, out int i))
                 return i;
-            else if(float.TryParse(value, out float f))
+            else if(float.TryParse(valueTrimmed, out float f))
                 return f;
-            else if(bool.TryParse(value, out bool b))
+            else if(bool.TryParse(valueTrimmed, out bool b))
                 return b;
             else if(value == string.Empty)
                 return new VineVar();
@@ -250,6 +251,21 @@ namespace Vine
             else
                 throw new Exception("Variable is of invalid type");
         }
+        public static bool operator == (VineVar v, int i)
+        {
+            Type t = v.data.GetType();
+            if (t == typeof(int))
+                return (int)v.data == i;
+            return false;
+        }
+        public static bool operator !=(VineVar v, int i)
+        {
+            Type t = v.data.GetType();
+            if (t == typeof(int))
+                return (int)v.data != i;
+            return true;
+        }
+
     }
     [Serializable]
     public class VineStoryMetadata
