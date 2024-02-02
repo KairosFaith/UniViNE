@@ -85,6 +85,50 @@ public class TwisonExtractor : ScriptableObject
         {
             string rawLine = rawLines[passageLineCount];
             rawLine = rawLine.Trim();
+            string ProcessMacrosInString(string input)
+            {
+                if (Regex.IsMatch(input, @"\(\w+-?\w+:.*\)"))
+                {
+                    if (Regex.IsMatch(input, @"\((if|else|else-?if):.+\) *\[.*\]", RegexOptions.IgnoreCase))//check inline branching
+                    {
+                        MatchCollection rawChains = Regex.Matches(input, @"\((if|else|else-?if):.+\) *\[.*\]", RegexOptions.IgnoreCase);//capture the whole branch macro chain
+                        foreach (Match chain in rawChains)//for each chain, capture the condition and the code block
+                        {
+                            string rawChain = chain.Value;//reprocess the chain to get the condition and code block
+                            MatchCollection macroCollection = Regex.Matches(rawChain, @"\((?<keyword>if|else|else-?if):(?<conditionBool>.+)\) *\[(?<codeBlock>[^\[\]]*)\]", RegexOptions.ExplicitCapture | RegexOptions.IgnoreCase);
+                            processedPassageText += $"string insert{insertCount} = string.Empty;\n";//print 1x insert variable for each chain
+                            foreach (Match macroHookPair in macroCollection)
+                            {
+                                GroupCollection macroGroups = macroHookPair.Groups;
+                                string keyword = macroGroups[nameof(keyword)].Value;
+                                string conditionBool = macroGroups[nameof(conditionBool)].Value;
+                                string codeBlock = macroGroups[nameof(codeBlock)].Value;
+                                conditionBool = ProcessStatement(conditionBool);
+                                string branchStatement = ProcessBranchingStatement(keyword, conditionBool);
+                                codeBlock = ProcessVariableInString(codeBlock);
+                                processedPassageText += $"{branchStatement}\ninsert{insertCount} = \"{codeBlock}\"\n";
+                            }
+                            input = input.Replace(rawChain, $"{{insert{insertCount}}}");
+                            insertCount++;
+                        }
+                    }
+                    else if (false)//TODO other lambda line macros
+                    {
+
+                    }
+                    else
+                    {
+                        MatchCollection macroChains = Regex.Matches(input, @"\(\w+-?\w+:.*\)", RegexOptions.IgnoreCase);
+                        foreach (Match chain in macroChains)
+                        {
+                            string rawChain = chain.Value;
+                            input = input.Replace(rawChain, $"{{{ProcessStatement(rawChain)}}}");
+                        }
+                    }
+                }
+                input = ProcessVariableInString(input);
+                return input;
+            };
             if (Regex.IsMatch(rawLine, @"^\(\w+-?\w+:.*\)"))
             {//Is Line a Macro?
                 if (Regex.IsMatch(rawLine, @"^\((if|else|else-?if):.*\)", RegexOptions.IgnoreCase))
@@ -159,7 +203,7 @@ public class TwisonExtractor : ScriptableObject
                 {
                     Match t = Regex.Match(rawLine, @"\[(?<messageWithArguments>.+)\]$", RegexOptions.ExplicitCapture);
                     string messageWithArguments = t.Groups[nameof(messageWithArguments)].Value;
-                    messageWithArguments = ProcessInlineVariable(messageWithArguments);
+                    messageWithArguments = ProcessMacrosInString(messageWithArguments);
                     messageWithArguments = Regex.Replace(messageWithArguments, ", *", "\", \"");
                     processedPassageText += $"yield return new {nameof(UniVineMarkedOutput)}(\"{messageWithArguments}\");" + "\n";
                 }
@@ -171,17 +215,8 @@ public class TwisonExtractor : ScriptableObject
                     string passageName = m[nameof(passageName)].Value;
                     processedPassageText += $"yield return new {nameof(VineDelayLinkOutput)}({time}, \"{passageName}\");" + "\n";
                 }
-                else if (Regex.IsMatch(rawLine, @"^\(set: *\$(.+) to (.+)\)$", RegexOptions.IgnoreCase))
-                {
-                    Match m = Regex.Match(rawLine, @"^\(set: *\$(?<variableToSet>\w+) to (?<valueStatement>.+)\)$", RegexOptions.ExplicitCapture | RegexOptions.IgnoreCase);
-                    GroupCollection g = m.Groups;
-                    string variableToSet = g[nameof(variableToSet)].Value;
-                    string valueStatement = g[nameof(valueStatement)].Value;
-                    valueStatement = ProcessStatement(valueStatement);
-                    processedPassageText += $"Set[\"{variableToSet}\"] = {valueStatement};" + "\n";
-                }
                 else
-                    throw new Exception(rawLine + "Unsupported or incorrectly formatted macro" +  passageLineCount);    
+                    processedPassageText += ProcessStatement(rawLine) + ";\n";
                 //processedPassageText += ProcessStatement(rawLine) + "\n";
             }
             else if (rawLine.StartsWith("#"))//Check header
@@ -201,43 +236,8 @@ public class TwisonExtractor : ScriptableObject
             else if (rawLine.Contains(":"))//assume it's a dialogue line since its not a macro and doesn't start with a #
             {
                 rawLine = Regex.Replace(rawLine, @"//([^//]+)//", @"<i>$1</i>");
-                rawLine = Regex.Replace(rawLine, @"\(text-colour: *(?<color>[A-Za-z]+) *\) *\[(?<text>.+)\]", @"<color=$1>$2</color>", RegexOptions.ExplicitCapture);
-                if (Regex.IsMatch(rawLine, @"\(\w+-?\w+:.*\)"))
-                {
-                    if(Regex.IsMatch(rawLine, @"\((if|else|elseif):.+\) *\[.*\]", RegexOptions.IgnoreCase))//check inline branching
-                    {
-                        MatchCollection rawChains = Regex.Matches(rawLine, @"\((if|else|elseif):.+\) *\[.*\]", RegexOptions.IgnoreCase);//capture the whole branch macro chain
-                        foreach (Match chain in rawChains)//for each chain, capture the condition and the code block
-                        {
-                            string rawChain = chain.Value;//reprocess the chain to get the condition and code block
-                            MatchCollection macroCollection = Regex.Matches(rawChain, @"\((?<keyword>if|else|elseif):(?<conditionBool>.+)\) *\[(?<codeBlock>[^\[\]]*)\]", RegexOptions.ExplicitCapture | RegexOptions.IgnoreCase);
-                            processedPassageText += $"string insert{insertCount} = string.Empty;\n";//print 1x insert variable for each chain
-                            foreach (Match macroHookPair in macroCollection)
-                            {
-                                GroupCollection macroGroups = macroHookPair.Groups;
-                                string keyword = macroGroups[nameof(keyword)].Value;
-                                string conditionBool = macroGroups[nameof(conditionBool)].Value;
-                                string codeBlock = macroGroups[nameof(codeBlock)].Value;
-                                conditionBool = ProcessStatement(conditionBool);
-                                string branchStatement = ProcessBranchingStatement(keyword, conditionBool);
-                                codeBlock = ProcessInlineVariable(codeBlock);
-                                processedPassageText += $"{branchStatement}\ninsert{insertCount} = \"{codeBlock}\"\n";
-                            }
-                            rawLine = rawLine.Replace(rawChain, $"{{insert{insertCount}}}");
-                            insertCount++;
-                        }
-                    }
-                    else
-                    {
-                        MatchCollection macroChains = Regex.Matches(rawLine, @"\(\w+-?\w+:.*\)", RegexOptions.IgnoreCase);
-                        foreach (Match chain in macroChains)
-                        {
-                            string rawChain = chain.Value;
-                            rawLine = rawLine.Replace(rawChain, $"{{{ProcessStatement(rawChain)}}}");
-                        }
-                    }
-                }
-                rawLine = ProcessInlineVariable(rawLine);
+                rawLine = Regex.Replace(rawLine, @"\(text-colour: *(?<color>[A-Za-z]+) *\) *\[(?<text>[^\[\]]+)\]", @"<color=$1>$2</color>", RegexOptions.ExplicitCapture);
+                ProcessMacrosInString(rawLine);
                 if (Regex.IsMatch(rawLine, @"^([^:\(\)]+)\(([A-Za-z]+)\): ?(.+)$"))
                 {
                     Match t = Regex.Match(rawLine, @"^(?<character>[^:\(\)]+)\((?<emotion>[A-Za-z]+)\): ?(?<speech>.+)$", RegexOptions.ExplicitCapture);
@@ -245,7 +245,7 @@ public class TwisonExtractor : ScriptableObject
                     string character = m[nameof(character)].Value;
                     VineCharacterEmotion emotion = (VineCharacterEmotion)Enum.Parse(typeof(VineCharacterEmotion), m[nameof(emotion)].Value.ToLower());
                     string speech = m[nameof(speech)].Value.Trim();
-                    processedPassageText += $"yield return new {nameof(VineLineOutput)}(\"{character}\", {nameof(VineCharacterEmotion)}.{emotion}, \"{speech}\");" + "\n";
+                    processedPassageText += $"yield return new {nameof(VineLineOutput)}(\"{character}\", {nameof(VineCharacterEmotion)}.{emotion}, $\"{speech}\");" + "\n";
                 }
                 else if (Regex.IsMatch(rawLine, @"([^:]+): *(.+)"))
                 {
@@ -282,7 +282,7 @@ public class TwisonExtractor : ScriptableObject
     {
         return Regex.IsMatch(rawLine, @"^\(\w+-?\w+:.*\)");
     }
-    string ProcessInlineVariable(string input)
+    string ProcessVariableInString(string input)
     {
         if(Regex.IsMatch(input, @"\$(\w+)"))
             input = Regex.Replace(input, @"\$(?<variableName>\w+)", "{Get(\"<$1>\")}");
@@ -307,6 +307,8 @@ public class TwisonExtractor : ScriptableObject
     string ProcessStatement(string rawStatement)
     {
         List<string> fetches = new List<string>();
+        if (Regex.IsMatch(rawStatement, @"^\(set: *\$(.+) to (.+)\)$", RegexOptions.IgnoreCase))
+            rawStatement = Regex.Replace(rawStatement, @"^\(set: *\$(?<variableToSet>.+) to (?<valueStatement>.+)\)$", "Set[\"$1\"] = $2", RegexOptions.ExplicitCapture | RegexOptions.IgnoreCase);
         while (Regex.IsMatch(rawStatement, @"\(([^\(\)]*)\)"))
         {
             MatchCollection matchCollection = Regex.Matches(rawStatement, @"\((?<inBracket>[^\(\)]*)\)", RegexOptions.ExplicitCapture);
@@ -314,28 +316,30 @@ public class TwisonExtractor : ScriptableObject
             {
                 GroupCollection g = m.Groups;
                 string inBracket = g[nameof(inBracket)].Value;
-                rawStatement = rawStatement.Replace(m.Value, $"~{fetches.Count}~");
-                fetches.Add(inBracket);
+                string toReplace = m.Value;
+                toReplace = toReplace.Trim();
+                //else
+                {
+                    rawStatement = rawStatement.Replace(m.Value, $"~{fetches.Count}~");
+                    fetches.Add(inBracket);
+                }
             }
         }
-        rawStatement = ProcessStatementOperatorsAndKeywords(rawStatement);
+        rawStatement = ProcessOperatorKeywords(rawStatement);
         for (int i = fetches.Count; i > 0;)
         {
             i--;
-            string processed = ProcessStatementOperatorsAndKeywords(fetches[i]);
+            string processed = ProcessOperatorKeywords(fetches[i]);
             rawStatement = rawStatement.Replace($"~{i}~", $"({processed})");
         }
         return rawStatement;
     }
-    string ProcessStatementOperatorsAndKeywords(string rawStatement)
+    string ProcessOperatorKeywords(string rawStatement)
     {
-        rawStatement = Regex.Replace(rawStatement, @" +or +", "||");
-        rawStatement = Regex.Replace(rawStatement, @" +and +", "&&");
-        rawStatement = Regex.Replace(rawStatement, @" +is +", "==");
-        rawStatement = Regex.Replace(rawStatement, @" +is +not +", " != ");
         rawStatement = rawStatement.Trim();
-        rawStatement = Regex.Replace(rawStatement, @"\$(?<variableName>\w+)", "Get(\"$1\")");
-        if (Regex.IsMatch(rawStatement, @"^history: *"))
+        if(Regex.IsMatch(rawStatement, @"^either:(.+)", RegexOptions.IgnoreCase))
+            rawStatement = Regex.Replace(rawStatement, @"^either:(.+)", "Either($1)", RegexOptions.IgnoreCase);
+        else if(Regex.IsMatch(rawStatement, @"^history: *"))
             rawStatement = Regex.Replace(rawStatement, @"^history: *", "History", RegexOptions.IgnoreCase);
         if (Regex.IsMatch(rawStatement, @"where +its +name", RegexOptions.IgnoreCase))
         {
@@ -344,7 +348,7 @@ public class TwisonExtractor : ScriptableObject
             {
                 GroupCollection g = m.Groups;
                 string lambdaStatement = g[nameof(lambdaStatement)].Value;
-                lambdaStatement = ProcessStatementOperatorsAndKeywords(lambdaStatement);
+                lambdaStatement = ProcessOperatorKeywords(lambdaStatement);
                 rawStatement = rawStatement.Replace(m.Value, $".Where(x => x{lambdaStatement})");
             }
         }
@@ -363,8 +367,11 @@ public class TwisonExtractor : ScriptableObject
                     rawStatement = "!" + rawStatement;
             }
         }
-        if(Regex.IsMatch(rawStatement, @"^either:(.+)", RegexOptions.IgnoreCase))
-            rawStatement = Regex.Replace(rawStatement, @"^either:(.+)", "Either($1)", RegexOptions.IgnoreCase);
+        rawStatement = Regex.Replace(rawStatement, @" +or +", "||");
+        rawStatement = Regex.Replace(rawStatement, @" +and +", "&&");
+        rawStatement = Regex.Replace(rawStatement, @" +is +", "==");
+        rawStatement = Regex.Replace(rawStatement, @" +is +not +", " != ");
+        rawStatement = Regex.Replace(rawStatement, @"\$(?<variableName>\w+)", "Get(\"$1\")");
         return rawStatement;
     }
 }

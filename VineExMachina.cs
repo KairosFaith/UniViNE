@@ -83,7 +83,7 @@ namespace Vine
                 else if (output is VineLinkOutput link)
                     LoadPassage(link.PassageName);
                 else
-                    throw new SystemException("Unknown output type");
+                    throw new SystemException(output.GetType().ToString() + "unsupported for this interaction");
             }
             else
                 StoryPlayer.SendMessage("OnPassageEnd", UnityEngine.SendMessageOptions.DontRequireReceiver);
@@ -136,6 +136,15 @@ namespace Vine
         {
             Random r = new Random();
             return args[r.Next(args.Length)];
+        }
+        protected void GoTo(string passageName)
+        {
+            StoryPlayer.Loader.LoadPassage(passageName);
+        }
+        protected void Restart()
+        {
+            //TODO scene manager??
+            StoryPlayer.Loader.StartStory(StoryName);
         }
         #endregion
     }
@@ -324,6 +333,15 @@ namespace Vine
             PassageName = passageName;
         }
         public VineLinkOutput(){ } //nonsense
+    }
+    public class VineLamdaLinkOutput: VineLinkOutput
+    {
+        public UnityEngine.Events.UnityAction LinesToExecute;
+        public VineLamdaLinkOutput(string textClick, UnityEngine.Events.UnityAction lines)
+        {
+            TextClick = textClick;
+            LinesToExecute = lines;
+        }
     }
     public class VineHeaderOutput : VinePassageOutput
     {
