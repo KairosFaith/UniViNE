@@ -21,7 +21,7 @@ public class UniVineInteractionUI : MonoBehaviour, VineInteraction
             SetTimer(dlink);
         else if (output is VineLinkOutput link)
             SetLink(link);
-        else if (output is VineLamdaLinkOutput lambda)
+        else if (output is VineClickLamdaOutput lambda)
             SetLink(lambda);
         else
             throw new System.Exception(output.GetType().ToString() + "unsupported for this interaction");
@@ -53,7 +53,7 @@ public class UniVineInteractionUI : MonoBehaviour, VineInteraction
         go.onClick.AddListener(()=>OnChoiceMade(h.PassageName));
         ButtonMount.ShuffleChildren();
     }
-    void SetLink(VineLamdaLinkOutput link)
+    void SetLink(VineClickLamdaOutput link)
     {
         Button go = Instantiate(ChoiceButtonPrefab, ButtonMount);
         WindowFrame.sizeDelta = new Vector2(WindowFrame.sizeDelta.x, WindowFrame.sizeDelta.y + _buttonSizeY);

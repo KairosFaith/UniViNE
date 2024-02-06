@@ -60,7 +60,7 @@ public class TwisonExtractor : ScriptableObject
 
         for (int i = 1; i <= numberOfPassages; i++)
         {
-            string passageName = listOfPassageMetadata[i - 1].Name;//id mismatch
+            string passageName = listOfPassageMetadata[i - 1].Name;//id mismatch, starts from 1 and not 0
             try
             {
                 string passageText = ProcessHarloweRawPassageOutput(rawPassageTexts[i]);
@@ -79,23 +79,25 @@ public class TwisonExtractor : ScriptableObject
     }
     public string ProcessHarloweRawPassageOutput(string rawPassageText)
     {
-        string[] rawLines = rawPassageText.Split(new[] { "\n" }, StringSplitOptions.None);
+        string[] rawLines = rawPassageText.Split(new[] { "\n" }, StringSplitOptions.RemoveEmptyEntries);
         string processedPassageText = string.Empty;
-        for (int passageLineCount = 0, insertCount = 0 ;passageLineCount<rawLines.Length; passageLineCount++)
+        for (int passageLineCount = 0, insertCount = 1 ;passageLineCount<rawLines.Length; passageLineCount++)
         {
             string rawLine = rawLines[passageLineCount];
-            rawLine = rawLine.Trim();
+            #region Parse Handling Functions
             string ProcessMacrosInString(string input)
             {
                 if (Regex.IsMatch(input, @"\(\w+-?\w+:.*\)"))
                 {
                     if (Regex.IsMatch(input, @"\((if|else|else-?if):.+\) *\[.*\]", RegexOptions.IgnoreCase))//check inline branching
                     {
-                        MatchCollection rawChains = Regex.Matches(input, @"\((if|else|else-?if):.+\) *\[.*\]", RegexOptions.IgnoreCase);//capture the whole branch macro chain
+                        MatchCollection rawChains = Regex.Matches(input, @"\((if|else|else-?if):.+\) *\[.*\]", RegexOptions.IgnoreCase);
                         foreach (Match chain in rawChains)//for each chain, capture the condition and the code block
                         {
                             string rawChain = chain.Value;//reprocess the chain to get the condition and code block
-                            MatchCollection macroCollection = Regex.Matches(rawChain, @"\((?<keyword>if|else|else-?if):(?<conditionBool>.+)\) *\[(?<codeBlock>[^\[\]]*)\]", RegexOptions.ExplicitCapture | RegexOptions.IgnoreCase);
+                            MatchCollection macroCollection = Regex.Matches(rawChain, 
+                                @"\((?<keyword>if|else|else-?if):(?<conditionBool>[^\(:\)]+)\) *\[(?<codeBlock>[^\[\]]*)\]", 
+                                RegexOptions.ExplicitCapture | RegexOptions.IgnoreCase);
                             processedPassageText += $"string insert{insertCount} = string.Empty;\n";//print 1x insert variable for each chain
                             foreach (Match macroHookPair in macroCollection)
                             {
@@ -103,18 +105,14 @@ public class TwisonExtractor : ScriptableObject
                                 string keyword = macroGroups[nameof(keyword)].Value;
                                 string conditionBool = macroGroups[nameof(conditionBool)].Value;
                                 string codeBlock = macroGroups[nameof(codeBlock)].Value;
-                                conditionBool = ProcessStatement(conditionBool);
+                                conditionBool = ProcessCStatement(conditionBool);
                                 string branchStatement = ProcessBranchingStatement(keyword, conditionBool);
-                                codeBlock = ProcessVariableInString(codeBlock);
-                                processedPassageText += $"{branchStatement}\ninsert{insertCount} = \"{codeBlock}\"\n";
+                                codeBlock = ProcessVariableInString(codeBlock);//NO macro inside the macro hook pls
+                                processedPassageText += $"{branchStatement}\ninsert{insertCount} = \"{codeBlock}\";\n";
                             }
                             input = input.Replace(rawChain, $"{{insert{insertCount}}}");
                             insertCount++;
                         }
-                    }
-                    else if (false)//TODO other lambda line macros
-                    {
-
                     }
                     else
                     {
@@ -122,141 +120,185 @@ public class TwisonExtractor : ScriptableObject
                         foreach (Match chain in macroChains)
                         {
                             string rawChain = chain.Value;
-                            input = input.Replace(rawChain, $"{{{ProcessStatement(rawChain)}}}");
+                            input = input.Replace(rawChain, $"{{{ProcessCStatement(rawChain)}}}");
                         }
                     }
                 }
-                input = ProcessVariableInString(input);
-                return input;
+                return ProcessVariableInString(input);
             };
-            if (Regex.IsMatch(rawLine, @"^\(\w+-?\w+:.*\)"))
-            {//Is Line a Macro?
-                if (Regex.IsMatch(rawLine, @"^\((if|else|else-?if):.*\)", RegexOptions.IgnoreCase))
-                {//is branching macro
-                    string keyword, conditionBool, codeBlock;
-                    if (Regex.IsMatch(rawLine, @"^\((if|else|else-?if):.*\) *\[.+\]$", RegexOptions.IgnoreCase))
-                    {//if its a single line wrapped macro
-                        Match m = Regex.Match(rawLine, @"^\((?<keyword>if|else|else-?if):(?<conditionBool>.*)\) *\[(?<codeBlock>.+)\]$", RegexOptions.ExplicitCapture | RegexOptions.IgnoreCase);
-                        GroupCollection g = m.Groups;
-                        keyword = g[nameof(keyword)].Value;
-                        conditionBool = g[nameof(conditionBool)].Value;
-                        codeBlock = g[nameof(codeBlock)].Value;
+            string ProcessMultiLineWrap()
+            {
+                string block = string.Empty;
+                passageLineCount++;
+                rawLine = rawLines[passageLineCount];
+                string lineToCheck = RemoveLinkHooks(rawLine);
+                if (Regex.IsMatch(lineToCheck, @"^\[.*\]$"))
+                {//only one line below
+                    Match inHook = Regex.Match(rawLine, @"^\[(?<block>.*)\]$", RegexOptions.ExplicitCapture);
+                    block += inHook.Groups[nameof(block)].Value;
+                }
+                else //multi line wrapped
+                    for (int h = 0; passageLineCount < rawLines.Length; passageLineCount++)
+                    {
+                        string nextRawLine = rawLines[passageLineCount];
+                        lineToCheck = RemoveLinkHooks(nextRawLine);
+                        if (Regex.IsMatch(lineToCheck, @"^\[.*"))
+                        {
+                            Match inHook = Regex.Match(nextRawLine, @"^\[(?<block>.*)$", RegexOptions.ExplicitCapture);
+                            block += inHook.Groups[nameof(block)].Value + "\n";
+                            h++;
+                        }
+                        else if (Regex.IsMatch(lineToCheck, @"\]$"))
+                        {
+                            Match inHook = Regex.Match(nextRawLine, @"^(?<block>.*)\]$", RegexOptions.ExplicitCapture);
+                            block += inHook.Groups[nameof(block)].Value + "\n";
+                            h--;
+                            if (h == 0)
+                                break;
+                        }
+                        else
+                            block += nextRawLine + "\n";
                     }
-                    else if (Regex.IsMatch(rawLine, @"^\((if|else|else-?if):.*\) *\[=", RegexOptions.IgnoreCase))
-                    {//using open hook, must be on the same line as the macro 
-                        Match m = Regex.Match(rawLine, @"^\((?<keyword>if|else|else-?if):(?<conditionBool>.+)\) *\[=(?<codeBlock>.*)$", RegexOptions.ExplicitCapture | RegexOptions.IgnoreCase | RegexOptions.Singleline);
+                return block;
+            }
+            string FilterAndProcessLineFormats()
+            {
+                if (Regex.IsMatch(rawLine, @"^\(\w+-?\w+:.*\)"))
+                {//Is Line a Macro?
+                    if (Regex.IsMatch(rawLine, @"^\((if|else|else-?if):.*\)", RegexOptions.IgnoreCase))
+                    {//is branching macro
+                        string keyword, conditionBool, codeBlock;
+                        if (Regex.IsMatch(rawLine, @"^\((if|else|else-?if):.*\) *\[.+\]$", RegexOptions.IgnoreCase))
+                        {//if its a single line wrapped macro
+                            Match m = Regex.Match(rawLine, @"^\((?<keyword>if|else|else-?if):(?<conditionBool>.*)\) *\[(?<codeBlock>.+)\]$", RegexOptions.ExplicitCapture | RegexOptions.IgnoreCase);
+                            GroupCollection g = m.Groups;
+                            keyword = g[nameof(keyword)].Value;
+                            conditionBool = g[nameof(conditionBool)].Value;
+                            codeBlock = g[nameof(codeBlock)].Value;
+                        }
+                        else if (Regex.IsMatch(rawLine, @"^\((if|else|else-?if):.*\) *\[=", RegexOptions.IgnoreCase))
+                        {//using open hook, must be on the same line as the macro 
+                            Match m = Regex.Match(rawLine, @"^\((?<keyword>if|else|else-?if):(?<conditionBool>.+)\) *\[=(?<codeBlock>.*)$", RegexOptions.ExplicitCapture | RegexOptions.IgnoreCase | RegexOptions.Singleline);
+                            GroupCollection g = m.Groups;
+                            keyword = g[nameof(keyword)].Value;
+                            conditionBool = g[nameof(conditionBool)].Value;
+                            codeBlock = g[nameof(codeBlock)].Value;
+                            while (passageLineCount < rawLines.Length)
+                            {
+                                codeBlock += rawLines[passageLineCount];
+                                passageLineCount++;
+                            }
+                        }
+                        else
+                        {//multi line wrapped text, hooks must be at the start and end of the chunk
+                            Match m = Regex.Match(rawLine, @"^\((?<keyword>if|else|else-?if):(?<conditionBool>.*)\) *$", RegexOptions.ExplicitCapture | RegexOptions.IgnoreCase);
+                            keyword = m.Groups[nameof(keyword)].Value;
+                            conditionBool = m.Groups[nameof(conditionBool)].Value;
+                            codeBlock = ProcessMultiLineWrap();
+                        }
+                        conditionBool = ProcessCStatement(conditionBool);
+                        string branchStatement = ProcessBranchingStatement(keyword, conditionBool);
+                        codeBlock = ProcessHarloweRawPassageOutput(codeBlock);
+                        return $"{branchStatement}\n{{{codeBlock}}}\n";
+                    }
+                    else if (Regex.IsMatch(rawLine, "^\\(text-style: *\"mark\" *\\) *\\[[^\\[\\]]+\\]$", RegexOptions.IgnoreCase))
+                    {
+                        Match t = Regex.Match(rawLine, @"\[(?<messageWithArguments>.+)\]$", RegexOptions.ExplicitCapture);
+                        string messageWithArguments = t.Groups[nameof(messageWithArguments)].Value;
+                        messageWithArguments = ProcessMacrosInString(messageWithArguments);
+                        messageWithArguments = Regex.Replace(messageWithArguments, ", *", "\", \"");
+                        return $"yield return new {nameof(UniVineMarkedOutput)}(\"{messageWithArguments}\");" + "\n";
+                    }
+                    else if (IsDelayedLink(rawLine))
+                    {
+                        Match t = Regex.Match(rawLine, "^\\(event: *when +time *>=? *(?<time>\\d*\\.?\\d)s *\\) *\\[=?\\(go-to: *\"(?<passageName>.+)\"", RegexOptions.IgnoreCase | RegexOptions.ExplicitCapture);
+                        GroupCollection m = t.Groups;
+                        string time = m[nameof(time)].Value;
+                        string passageName = m[nameof(passageName)].Value;
+                        return $"yield return new {nameof(VineDelayLinkOutput)}({time}, \"{passageName}\");" + "\n";
+                    }
+                }
+                else if (IsClickLambda(rawLine))
+                {
+                    string textClick, lambdaBlock;
+                    if (Regex.IsMatch(rawLine, "(?<front>.+)\\(click: *\"(?<textClick>.+)\" *\\) *\\[(?<lambdaBlock>.+)\\]$", RegexOptions.IgnoreCase))
+                    {
+                        Match m = Regex.Match(rawLine, "(?<front>.+)\\(click: *\"(?<textClick>.+)\" *\\) *\\[(?<lambdaBlock>.+)\\]$", RegexOptions.IgnoreCase | RegexOptions.ExplicitCapture);
                         GroupCollection g = m.Groups;
-                        keyword = g[nameof(keyword)].Value;
-                        conditionBool = g[nameof(conditionBool)].Value;
-                        codeBlock = g[nameof(codeBlock)].Value;
+                        textClick = g[nameof(textClick)].Value;
+                        lambdaBlock = g[nameof(lambdaBlock)].Value;
+                    }
+                    else if (Regex.IsMatch(rawLine, "(?<front>.+)\\(click: *\"(?<textClick>.+)\" *\\) *\\[=(?<lambdaBlock>.*)$", RegexOptions.IgnoreCase))
+                    {
+                        Match m = Regex.Match(rawLine, "(?<front>.+)\\(click: *\"(?<textClick>.+)\" *\\) *\\[=(?<lambdaBlock>.*)$", RegexOptions.IgnoreCase | RegexOptions.ExplicitCapture);
+                        GroupCollection g = m.Groups;
+                        textClick = g[nameof(textClick)].Value;
+                        lambdaBlock = g[nameof(lambdaBlock)].Value;
                         while (passageLineCount < rawLines.Length)
                         {
-                            codeBlock += rawLines[passageLineCount];
+                            lambdaBlock += rawLines[passageLineCount];
                             passageLineCount++;
                         }
                     }
                     else
                     {//multi line wrapped text, hooks must be at the start and end of the chunk
-                        Match m = Regex.Match(rawLine, @"^\((?<keyword>if|else|else-?if):(?<conditionBool>.*)\) *$", RegexOptions.ExplicitCapture | RegexOptions.IgnoreCase);
-                        keyword = m.Groups[nameof(keyword)].Value;
-                        conditionBool = m.Groups[nameof(conditionBool)].Value;
-                        codeBlock = string.Empty;
-
-                        //TODO exception handling for links
-                        passageLineCount++;
-                        rawLine = rawLines[passageLineCount];
-                        string lineToCheck = RemoveLinkHooks(rawLine);
-                        if (Regex.IsMatch(lineToCheck, @"^\[.*\]$"))
-                        {//only one line below
-                            Match inHook = Regex.Match(rawLine, @"^\[(?<codeBlock>.*)\]$", RegexOptions.ExplicitCapture);
-                            codeBlock += inHook.Groups[nameof(codeBlock)].Value;
-                        }
-                        else //multi line wrapped
-                            for (int h = 0; passageLineCount < rawLines.Length; passageLineCount++)
-                            {
-                                string nextRawLine = rawLines[passageLineCount];
-                                lineToCheck = RemoveLinkHooks(nextRawLine);
-                                if (Regex.IsMatch(lineToCheck, @"^\[.*"))
-                                {
-                                    Match inHook = Regex.Match(nextRawLine, @"^\[(?<codeBlock>.*)", RegexOptions.ExplicitCapture);
-                                    codeBlock += inHook.Groups[nameof(codeBlock)].Value + "\n";
-                                    h++;
-                                }
-                                else if (Regex.IsMatch(lineToCheck, @"\]$"))
-                                {
-                                    Match inHook = Regex.Match(nextRawLine, @"^(?<codeBlock>.*)\]$", RegexOptions.ExplicitCapture);
-                                    codeBlock += inHook.Groups[nameof(codeBlock)].Value + "\n";
-                                    h--;
-                                    if (h == 0)
-                                        break;
-                                }
-                                else
-                                    codeBlock += nextRawLine + "\n";
-                            }
+                        Match m = Regex.Match(rawLine, "(?<front>.+)\\(click: *\"(?<textClick>.+)\" *\\) *$", RegexOptions.ExplicitCapture | RegexOptions.IgnoreCase);
+                        GroupCollection g = m.Groups;
+                        textClick = g[nameof(textClick)].Value;
+                        lambdaBlock = ProcessMultiLineWrap();
                     }
-                    conditionBool = ProcessStatement(conditionBool);
-                    string branchStatement = ProcessBranchingStatement(keyword, conditionBool);
-                    codeBlock = ProcessHarloweRawPassageOutput(codeBlock);
-                    processedPassageText += $"{branchStatement}\n{{{codeBlock}}}\n";
+                    lambdaBlock = ProcessHarloweRawPassageOutput(lambdaBlock);
+                    lambdaBlock.Trim();
+                    textClick = ProcessMacrosInString(textClick);
+                    if (Regex.IsMatch(lambdaBlock, @"^\w+\(\);$"))
+                    {
+                        Match m = Regex.Match(lambdaBlock, @"^(?<functionName>\w+)\(\);$", RegexOptions.ExplicitCapture);
+                        string functionName = m.Groups[nameof(functionName)].Value;
+                        return $"yield return new {nameof(VineClickLamdaOutput)}(\"{textClick}\", {functionName});" + "\n";
+                    }
+                    else
+                        return $"yield return new {nameof(VineClickLamdaOutput)}(\"{textClick}\", () =>\n {{{lambdaBlock}}});" + "\n";
                 }
-                else if (Regex.IsMatch(rawLine, "^\\(text-style: *\"mark\" *\\) *\\[[^\\[\\]]+\\]$", RegexOptions.IgnoreCase))
+                else if (rawLine.StartsWith("#"))//Check header
                 {
-                    Match t = Regex.Match(rawLine, @"\[(?<messageWithArguments>.+)\]$", RegexOptions.ExplicitCapture);
-                    string messageWithArguments = t.Groups[nameof(messageWithArguments)].Value;
-                    messageWithArguments = ProcessMacrosInString(messageWithArguments);
-                    messageWithArguments = Regex.Replace(messageWithArguments, ", *", "\", \"");
-                    processedPassageText += $"yield return new {nameof(UniVineMarkedOutput)}(\"{messageWithArguments}\");" + "\n";
+                    string header = rawLine.Remove(0, 1);//remove the # at the start
+                    passageLineCount++;
+                    string body = rawLines[passageLineCount];
+                    return $"yield return new {nameof(VineHeaderOutput)}(\"{header}\", \"{body}\");" + "\n";
                 }
-                else if (IsDelayedLink(rawLine))
+                else if (IsLinkHook(rawLine))
                 {
-                    Match t = Regex.Match(rawLine, "^\\(event: *when +time *>=? *(?<time>\\d*\\.?\\d)s *\\) *\\[=?\\(go-to: *\"(?<passageName>.+)\"", RegexOptions.IgnoreCase | RegexOptions.ExplicitCapture);
-                    GroupCollection m = t.Groups;
-                    string time = m[nameof(time)].Value;
-                    string passageName = m[nameof(passageName)].Value;
-                    processedPassageText += $"yield return new {nameof(VineDelayLinkOutput)}({time}, \"{passageName}\");" + "\n";
+                    Match l = Regex.Match(rawLine, @"^\[\[(?<labelWithPassageName>.+)\]\]$", RegexOptions.ExplicitCapture);
+                    string labelWithPassageName = l.Groups[nameof(labelWithPassageName)].Value;
+                    labelWithPassageName = labelWithPassageName.Replace("|", "\",\"");
+                    return ($"yield return new {nameof(VineLinkOutput)}(\"{labelWithPassageName}\");") + "\n";
                 }
-                else
-                    processedPassageText += ProcessStatement(rawLine) + ";\n";
-                //processedPassageText += ProcessStatement(rawLine) + "\n";
-            }
-            else if (rawLine.StartsWith("#"))//Check header
-            {
-                string header = rawLine.Remove(0,1);//remove the # at the start
-                passageLineCount++;
-                string body = rawLines[passageLineCount];
-                processedPassageText += $"yield return new {nameof(VineHeaderOutput)}(\"{header}\", \"{body}\");" + "\n";
-            }
-            else if (IsLinkHook(rawLine))
-            {
-                Match l = Regex.Match(rawLine, @"^\[\[(?<labelWithPassageName>.+)\]\]$", RegexOptions.ExplicitCapture);
-                string labelWithPassageName = l.Groups[nameof(labelWithPassageName)].Value;
-                labelWithPassageName = labelWithPassageName.Replace("|", "\",\"");
-                processedPassageText += ($"yield return new {nameof(VineLinkOutput)}(\"{labelWithPassageName}\");") + "\n";
-            }
-            else if (rawLine.Contains(":"))//assume it's a dialogue line since its not a macro and doesn't start with a #
-            {
-                rawLine = Regex.Replace(rawLine, @"//([^//]+)//", @"<i>$1</i>");
-                rawLine = Regex.Replace(rawLine, @"\(text-colour: *(?<color>[A-Za-z]+) *\) *\[(?<text>[^\[\]]+)\]", @"<color=$1>$2</color>", RegexOptions.ExplicitCapture);
-                ProcessMacrosInString(rawLine);
-                if (Regex.IsMatch(rawLine, @"^([^:\(\)]+)\(([A-Za-z]+)\): ?(.+)$"))
+                else if (rawLine.Contains(":"))//assume it's a dialogue line since its not a macro and doesn't start with a #
                 {
-                    Match t = Regex.Match(rawLine, @"^(?<character>[^:\(\)]+)\((?<emotion>[A-Za-z]+)\): ?(?<speech>.+)$", RegexOptions.ExplicitCapture);
-                    GroupCollection m = t.Groups;
-                    string character = m[nameof(character)].Value;
-                    VineCharacterEmotion emotion = (VineCharacterEmotion)Enum.Parse(typeof(VineCharacterEmotion), m[nameof(emotion)].Value.ToLower());
-                    string speech = m[nameof(speech)].Value.Trim();
-                    processedPassageText += $"yield return new {nameof(VineLineOutput)}(\"{character}\", {nameof(VineCharacterEmotion)}.{emotion}, $\"{speech}\");" + "\n";
+                    rawLine = Regex.Replace(rawLine, @"//([^//]+)//", @"<i>$1</i>");
+                    rawLine = Regex.Replace(rawLine, @"\(text-colour: *(?<color>[A-Za-z]+) *\) *\[(?<text>[^\[\]]+)\]", @"<color=$1>$2</color>", RegexOptions.ExplicitCapture);
+                    rawLine = ProcessMacrosInString(rawLine);
+                    if (Regex.IsMatch(rawLine, @"^([^:\(\)]+)\(([A-Za-z]+)\): ?(.+)$"))
+                    {
+                        Match t = Regex.Match(rawLine, @"^(?<character>[^:\(\)]+)\((?<emotion>[A-Za-z]+)\): ?(?<speech>.+)$", RegexOptions.ExplicitCapture);
+                        GroupCollection m = t.Groups;
+                        string character = m[nameof(character)].Value;
+                        VineCharacterEmotion emotion = (VineCharacterEmotion)Enum.Parse(typeof(VineCharacterEmotion), m[nameof(emotion)].Value.ToLower());
+                        string speech = m[nameof(speech)].Value.Trim();
+                        return $"yield return new {nameof(VineLineOutput)}(\"{character}\", {nameof(VineCharacterEmotion)}.{emotion}, $\"{speech}\");" + "\n";
+                    }
+                    else if (Regex.IsMatch(rawLine, @"([^:]+): *(.+)"))
+                    {
+                        rawLine = Regex.Replace(rawLine, @"(?<character>[^:]+): *(?<speech>.+)", "$1\", $\"$2");
+                        return $"yield return new {nameof(VineLineOutput)}(\"{rawLine}\");" + "\n";
+                    }
                 }
-                else if (Regex.IsMatch(rawLine, @"([^:]+): *(.+)"))
-                {
-                    rawLine = Regex.Replace(rawLine, @"(?<character>[^:]+): *(?<speech>.+)", "$1\", $\"$2");//TODO maybe use match compose instead?
-                    processedPassageText += $"yield return new {nameof(VineLineOutput)}(\"{rawLine}\");" + "\n";
-                }
-                else if (!string.IsNullOrWhiteSpace(rawLine))
-                    throw new Exception(passageLineCount + rawLine + "Dialogue Line Format is Incorrect");
-            }
-            else if(!string.IsNullOrWhiteSpace(rawLine))
-                throw new Exception(passageLineCount + "Could not match any line format" + rawLine);
+                return ProcessCStatement(rawLine) + ";\n";
+            };
+            #endregion
+            rawLine = rawLine.Trim();
+            string nextLine = FilterAndProcessLineFormats();//stupid fix but it works
+            processedPassageText += nextLine;//TODO what was wrong with one-lining this??????
         }
         return processedPassageText;
     }
@@ -282,10 +324,21 @@ public class TwisonExtractor : ScriptableObject
     {
         return Regex.IsMatch(rawLine, @"^\(\w+-?\w+:.*\)");
     }
+    bool IsClickLambda(string rawLine)
+    {
+        if(Regex.IsMatch(rawLine, "(?<front>.+)\\(click: *\"(?<textClick>.+)\" *\\)", RegexOptions.IgnoreCase))
+        {
+            Match m = Regex.Match(rawLine, "(?<front>.+)\\(click: *\"(?<textClick>.+)\" *\\)", RegexOptions.IgnoreCase | RegexOptions.ExplicitCapture);
+            string front = m.Groups[nameof(front)].Value;
+            string textClick = m.Groups[nameof(textClick)].Value;
+            return front == textClick;
+        }
+        return false;
+    }
     string ProcessVariableInString(string input)
     {
         if(Regex.IsMatch(input, @"\$(\w+)"))
-            input = Regex.Replace(input, @"\$(?<variableName>\w+)", "{Get(\"<$1>\")}");
+            input = Regex.Replace(input, @"\$(?<variableName>\w+)", "{Get(\"$1\")}",RegexOptions.ExplicitCapture);
         return input;
     }
     #endregion
@@ -304,14 +357,21 @@ public class TwisonExtractor : ScriptableObject
             return $"else if({conditionBool})";
         return keyword;
     } 
-    string ProcessStatement(string rawStatement)
+    string ProcessCStatement(string rawStatement)
     {
         List<string> fetches = new List<string>();
+        //Fixed Statement structures
         if (Regex.IsMatch(rawStatement, @"^\(set: *\$(.+) to (.+)\)$", RegexOptions.IgnoreCase))
             rawStatement = Regex.Replace(rawStatement, @"^\(set: *\$(?<variableToSet>.+) to (?<valueStatement>.+)\)$", "Set[\"$1\"] = $2", RegexOptions.ExplicitCapture | RegexOptions.IgnoreCase);
-        while (Regex.IsMatch(rawStatement, @"\(([^\(\)]*)\)"))
+        //Coded Functions
+        if (Regex.IsMatch(rawStatement, @"^\(restart: *\)$", RegexOptions.IgnoreCase))
+            rawStatement = Regex.Replace(rawStatement, @"\(restart: *\)", "Restart()", RegexOptions.IgnoreCase);
+        if (Regex.IsMatch(rawStatement, @"^\(go-to: *(?<passageName>.+) *\)$", RegexOptions.IgnoreCase))
+            rawStatement = Regex.Replace(rawStatement, @"^\(go-to: *(?<passageName>.+) *\)$", "GoTo($1)", RegexOptions.IgnoreCase|RegexOptions.ExplicitCapture);
+        //process brackets
+        while (Regex.IsMatch(rawStatement, @"\(([^\(\)]+)\)"))
         {
-            MatchCollection matchCollection = Regex.Matches(rawStatement, @"\((?<inBracket>[^\(\)]*)\)", RegexOptions.ExplicitCapture);
+            MatchCollection matchCollection = Regex.Matches(rawStatement, @"\((?<inBracket>[^\(\)]+)\)", RegexOptions.ExplicitCapture);
             foreach (Match m in matchCollection)
             {
                 GroupCollection g = m.Groups;

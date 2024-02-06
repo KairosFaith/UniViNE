@@ -250,6 +250,26 @@ namespace Vine
             else
                 throw new Exception("Variable is of invalid type");
         }
+        public static bool operator >= (VineVar v, float f)
+        {
+            Type t = v.data.GetType();
+            if (t == typeof(int))
+                return (int)v.data >= f;
+            else if (t == typeof(float))
+                return (float)v.data >= f;
+            else
+                throw new Exception("Variable is of invalid type");
+        }
+        public static bool operator <= (VineVar v, float f)
+        {
+            Type t = v.data.GetType();
+            if (t == typeof(int))
+                return (int)v.data <= f;
+            else if (t == typeof(float))
+                return (float)v.data <= f;
+            else
+                throw new Exception("Variable is of invalid type");
+        }
         public static bool operator < (VineVar v, float f)
         {
             Type t = v.data.GetType();
@@ -274,7 +294,14 @@ namespace Vine
                 return (int)v.data != i;
             return true;
         }
-
+        public override bool Equals(object obj)
+        {
+            return data.Equals(obj);
+        }
+        public override int GetHashCode()
+        {
+            return data.GetHashCode();
+        }
     }
     [Serializable]
     public class VineStoryMetadata
@@ -334,10 +361,10 @@ namespace Vine
         }
         public VineLinkOutput(){ } //nonsense
     }
-    public class VineLamdaLinkOutput: VineLinkOutput
+    public class VineClickLamdaOutput: VineLinkOutput
     {
         public UnityEngine.Events.UnityAction LinesToExecute;
-        public VineLamdaLinkOutput(string textClick, UnityEngine.Events.UnityAction lines)
+        public VineClickLamdaOutput(string textClick, UnityEngine.Events.UnityAction lines)
         {
             TextClick = textClick;
             LinesToExecute = lines;
