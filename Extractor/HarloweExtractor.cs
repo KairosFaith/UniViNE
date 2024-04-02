@@ -6,6 +6,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using System.Text.RegularExpressions;
 using System.Linq;
+using System.Runtime.InteropServices;
 
 public class HarloweExtractor : FormatExtractor
 {
@@ -17,13 +18,18 @@ public class HarloweExtractor : FormatExtractor
         _RawLines = input.Split(new[] { "\n" }, StringSplitOptions.RemoveEmptyEntries).ToList();
         _ProcessedLines = new List<string>();
     }
+    public void AddLine(string line)
+    {
+        _ProcessedLines.Add(line);
+        Debug.Log(line);
+    }
     public override string[] Extract()
     {
         while(_RawLines.Count > 0)
         {
             string nextLineToProcess = DrawFetchLine();
             string processedLine = FilterAndProcessLine(nextLineToProcess);
-            _ProcessedLines.Add(processedLine);
+            AddLine(processedLine);
         }
         return _ProcessedLines.ToArray();
     }
@@ -102,7 +108,7 @@ public class HarloweExtractor : FormatExtractor
         }
         conditionBool = ProcessCStatement(conditionBool);
         string branchStatement = ProcessBranchingStatement(keyword, conditionBool);
-        _ProcessedLines.Add($"{branchStatement}\n{{");
+        AddLine($"{branchStatement}\n{{");
         ExtractInternalBlock(codeBlock);
         return "}\n";
     }
@@ -152,7 +158,7 @@ public class HarloweExtractor : FormatExtractor
             lambdaBlock = MarkOutMultilineWrap();
         }
         textClick = ProcessMacrosInString(textClick);
-        _ProcessedLines.Add($"yield return new {nameof(VineClickLamdaOutput)}(\"{textClick}\", () =>\n {{");
+        AddLine($"yield return new {nameof(VineClickLamdaOutput)}(\"{textClick}\", () =>\n {{");
         ExtractInternalBlock(lambdaBlock);
         return "});\n";
     }
@@ -174,7 +180,7 @@ public class HarloweExtractor : FormatExtractor
         foreach(string line in lines)
         {
             string processedLine = FilterAndProcessLine(line);
-            _ProcessedLines.Add(processedLine);
+            AddLine(processedLine);
         }
     }
     List<string> MarkOutOpenHook(string topLine)
@@ -249,7 +255,7 @@ public class HarloweExtractor : FormatExtractor
                         @"\((?<keyword>if|else|else-?if):(?<conditionBool>[^\(:\)]+)\) *\[(?<codeBlock>[^\[\]]*)\]",
                         RegexOptions.ExplicitCapture | RegexOptions.IgnoreCase);
                     _InsertCounter++;
-                    _ProcessedLines.Add($"string insert{_InsertCounter} = string.Empty;\n");//print 1x insert variable for each chain
+                    AddLine($"string insert{_InsertCounter} = string.Empty;\n");//print 1x insert variable for each chain
                     foreach (Match macroHookPair in macroCollection)
                     {
                         GroupCollection macroGroups = macroHookPair.Groups;
@@ -259,7 +265,7 @@ public class HarloweExtractor : FormatExtractor
                         conditionBool = ProcessCStatement(conditionBool);
                         string branchStatement = ProcessBranchingStatement(keyword, conditionBool);
                         codeBlock = ProcessVariableInString(codeBlock);//NO macro inside the macro hook pls
-                        _ProcessedLines.Add($"{branchStatement}\ninsert{_InsertCounter} = \"{codeBlock}\";\n");
+                        AddLine($"{branchStatement}\ninsert{_InsertCounter} = \"{codeBlock}\";\n");
                     }
                     input = input.Replace(rawChain, $"{{insert{_InsertCounter}}}");
                 }
