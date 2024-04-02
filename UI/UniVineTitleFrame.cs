@@ -14,6 +14,6 @@ public class UniVineTitleFrame : MonoBehaviour, IPointerDownHandler
     {
         //TODO fade out?
         Destroy(gameObject);
-        UniVinePlayer.Instance.Loader.NextLineInPassage();
+        UniVinePlayer.Instance.ContinuePassage();
     }
 }

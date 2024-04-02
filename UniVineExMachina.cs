@@ -8,8 +8,9 @@ using System.Collections.Generic;
 public abstract class IUniVineTextBox : MonoBehaviour, IPointerDownHandler
 {
     public TMP_Text MainTextBox;
-    protected bool _Pressed;
     public List<Transform> FramesToShrink;
+    public RectTransform ContinuePromptPrefab;
+    protected bool _Pressed;
     protected Action OnBoxOpen, OnBoxClose, OnTextUpdate;
     public virtual void InitiateBox(VineLineOutput line)
     {
@@ -22,6 +23,10 @@ public abstract class IUniVineTextBox : MonoBehaviour, IPointerDownHandler
     {
         foreach (Transform frame in FramesToShrink)
             frame.localScale = Vector3.one * t;
+    }
+    protected void ShowContinuePrompt()
+    {
+        Instantiate(ContinuePromptPrefab, MainTextBox.rectTransform);
     }
     protected virtual IEnumerator BoxRoutine(float duration, float letterRate)
     {
@@ -37,6 +42,7 @@ public abstract class IUniVineTextBox : MonoBehaviour, IPointerDownHandler
         {
             TMP_PageInfo currentPageInfo = MainTextBox.textInfo.pageInfo[pageNumber - 1];
             int visibleCharactersToFillPage = currentPageInfo.lastCharacterIndex + 1;
+            //TODO clean up this coroutine
             for (int i = currentPageInfo.firstCharacterIndex + 1; i <= visibleCharactersToFillPage; i++)
             {
                 MainTextBox.maxVisibleCharacters = i;
@@ -49,6 +55,7 @@ public abstract class IUniVineTextBox : MonoBehaviour, IPointerDownHandler
                 OnTextUpdate?.Invoke();
             }
             MainTextBox.maxVisibleCharacters = visibleCharactersToFillPage;
+            ShowContinuePrompt();
             yield return new WaitUntil(() => _Pressed);
             _Pressed = false;
             pageNumber++;
@@ -62,7 +69,7 @@ public abstract class IUniVineTextBox : MonoBehaviour, IPointerDownHandler
             yield return new WaitForEndOfFrame();
         }
         Destroy(gameObject);
-        UniVinePlayer.Instance.Loader.NextLineInPassage();
+        UniVinePlayer.Instance.ContinuePassage();
     }
     public void OnPointerDown(PointerEventData eventData)
     {

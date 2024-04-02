@@ -8,16 +8,6 @@ using System.Collections;
 public class UniVinePlayer : MonoBehaviour, VinePlayer
 {
     public static UniVinePlayer Instance;
-    private void Awake()
-    {
-        if(Instance==null)
-        Instance = this;
-    }
-    private void OnDestroy()
-    {
-        if (Instance == this)
-        Instance = null;
-    }
     const string
         Narration = "Narration",
         //folder names
@@ -25,6 +15,7 @@ public class UniVinePlayer : MonoBehaviour, VinePlayer
         BackgroundsFolder = "Backgrounds",
         MusicFolder = "Music";
     //Slash = "/";
+    public string ScoreUpMark = "//Detective Score Up!//";
     public float LetterRate = .1f, BoxOpenCloseRate = .1f, BackgroundShiftRate;
     public AudioMixerGroup MusicChannel;
     public Image BackgroundDisplay;
@@ -36,21 +27,32 @@ public class UniVinePlayer : MonoBehaviour, VinePlayer
     public UniVinePortraitFrame PortraitFramePrefab;
     public UniVineTitleFrame TitleFramePrefab;
     public VineLoader Loader { get; set; }
-    public Dictionary<string, Action> SpecialMarks { get; set; }
+    public Dictionary<string, Action> SpecialMarks { get; set; }//TODO set this up properly!!!
     public Dictionary<string, VineVar> InGameVariables { get => throw new NotImplementedException(); set => throw new NotImplementedException(); }
     AudioSource _CurrentMusicSource;
     Dictionary<string, Sprite> _BackgroundSpritesBank = new Dictionary<string, Sprite>();
     Dictionary<(string, VineCharacterEmotion), Sprite> _CharacterSpriteBank = new Dictionary<(string, VineCharacterEmotion), Sprite>();
     Sprite _LastFetchedPlayerSprite;//for use in interactions
-    void Start()//for testing
+    private void Awake()
     {
+        if(Instance==null)
+        Instance = this;
+        else
+        {
+            Destroy(gameObject);
+            return;
+        }
         SpecialMarks = new Dictionary<string, Action>
         {
-            { "//Detective Score Up!//", () => print("Detective Score Up!") }
+            { ScoreUpMark, ScoreUp }
         };
-
         Loader = new VineLoader(this);
         Loader.StartStory("Prologue");
+    }
+    private void OnDestroy()
+    {
+        if (Instance == this)
+        Instance = null;
     }
     public void OutputLine(VineLineOutput line)
     {
@@ -142,6 +144,10 @@ public class UniVinePlayer : MonoBehaviour, VinePlayer
         _BackgroundSpritesBank.Add(id, s);
         return s;
     }
+    public void ContinuePassage()
+    {
+        Loader.NextLineInPassage();
+    }
     public void ShowTitle(VineHeaderOutput header)
     {
         UniVineTitleFrame frame = Instantiate(TitleFramePrefab, transform);
@@ -153,6 +159,10 @@ public class UniVinePlayer : MonoBehaviour, VinePlayer
         UniVineInteractionUI ui = Instantiate(InteractionPrefab, transform);
         ui.Initialise(metadata, _LastFetchedPlayerSprite);
         return ui;
+    }
+    void ScoreUp()
+    {
+        //TODO set this up properly!!!
     }
 }
 //iphone 5, camera size 3.60315883159637428 + 1-epsilon

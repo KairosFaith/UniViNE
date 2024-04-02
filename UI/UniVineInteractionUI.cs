@@ -1,9 +1,8 @@
 using System.Collections;
-using UnityEngine;
-using Vine;
 using TMPro;
+using UnityEngine;
 using UnityEngine.UI;
-using System.Collections.Generic;
+using Vine;
 public class UniVineInteractionUI : MonoBehaviour, VineInteraction
 {
     public TMP_Text Header,Body;
@@ -22,7 +21,7 @@ public class UniVineInteractionUI : MonoBehaviour, VineInteraction
         else if (output is VineLinkOutput link)
             SetLink(link);
         else if (output is VineClickLamdaOutput lambda)
-            SetLink(lambda);
+            SetClickLamda(lambda);
         else
             throw new System.Exception(output.GetType().ToString() + "unsupported for this interaction");
     }
@@ -44,23 +43,24 @@ public class UniVineInteractionUI : MonoBehaviour, VineInteraction
         Header.text = h.Header;
         Body.text = h.Body;
     }
-    void SetLink(VineLinkOutput h)
+    void SpawnChoiceButton(string textClick, UnityEngine.Events.UnityAction listener)
     {
         Button go = Instantiate(ChoiceButtonPrefab, ButtonMount);
-        WindowFrame.sizeDelta = new Vector2(WindowFrame.sizeDelta.x, WindowFrame.sizeDelta.y + _buttonSizeY);
+        RectTransform windowFrame = (RectTransform)transform;//TODO test RectTransform casting
+        Vector2 sizeDelta = WindowFrame.sizeDelta;
+        WindowFrame.sizeDelta = new Vector2(sizeDelta.x, sizeDelta.y + _buttonSizeY);
         var t = go.GetComponentInChildren<TMP_Text>();
-        t.text = h.TextClick;
-        go.onClick.AddListener(()=>OnChoiceMade(h.PassageName));
+        t.text = textClick;
+        go.onClick.AddListener(listener);
         ButtonMount.ShuffleChildren();
     }
-    void SetLink(VineClickLamdaOutput link)
+    void SetLink(VineLinkOutput h)
     {
-        Button go = Instantiate(ChoiceButtonPrefab, ButtonMount);
-        WindowFrame.sizeDelta = new Vector2(WindowFrame.sizeDelta.x, WindowFrame.sizeDelta.y + _buttonSizeY);
-        var t = go.GetComponentInChildren<TMP_Text>();
-        t.text = link.TextClick;
-        go.onClick.AddListener(link.LinesToExecute);
-        ButtonMount.ShuffleChildren();
+        SpawnChoiceButton(h.TextClick, () => OnChoiceMade(h.PassageName));
+    }
+    void SetClickLamda(VineClickLamdaOutput link)
+    {
+        SpawnChoiceButton(link.TextClick, link.LinesToExecute);
     }
     void SetTimer(VineDelayLinkOutput dlink)
     {
