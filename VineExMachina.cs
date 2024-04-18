@@ -361,13 +361,26 @@ namespace Vine
         }
         public VineLinkOutput(){ } //nonsense
     }
-    public class VineClickLamdaOutput: VineLinkOutput
+    public abstract class IVineActionOutput : VinePassageOutput 
+    { 
+        public UnityEngine.Events.UnityAction ActionBlock;
+    }
+    public class VineClickActionOutput : IVineActionOutput
     {
-        public UnityEngine.Events.UnityAction LinesToExecute;
-        public VineClickLamdaOutput(string textClick, UnityEngine.Events.UnityAction lines)
+        public string TextClick;
+        public VineClickActionOutput(string textClick, UnityEngine.Events.UnityAction actionBlock)
         {
             TextClick = textClick;
-            LinesToExecute = lines;
+            ActionBlock = actionBlock;
+        }
+    }
+    public class VineDelayActionOutput : IVineActionOutput
+    {
+        public float Delay;
+        public VineDelayActionOutput(float delay, UnityEngine.Events.UnityAction lines)
+        {
+            Delay = delay;
+            ActionBlock = lines;
         }
     }
     public class VineHeaderOutput : VinePassageOutput
@@ -378,16 +391,6 @@ namespace Vine
             Header = header;
             Body = body;
         }
-    }
-    public class VineDelayLinkOutput : VineLinkOutput
-    {
-        public float Delay;
-        public VineDelayLinkOutput(float delay, string passageName)
-        {
-            Delay = delay;
-            PassageName = passageName;
-        }
-        public VineDelayLinkOutput() { }//C# nonsense 
     }
     public class UniVineMarkedOutput : VinePassageOutput
     {

@@ -16,12 +16,12 @@ public class UniVineInteractionUI : MonoBehaviour, VineInteraction
     {
         if (output is VineHeaderOutput h)
             SetHeader(h);
-        else if (output is VineDelayLinkOutput dlink)
-            SetTimer(dlink);
+        else if (output is VineDelayActionOutput delayAction)
+            SetTimer(delayAction);
+        else if (output is VineClickActionOutput clickAction)
+            SetClickAction(clickAction);
         else if (output is VineLinkOutput link)
             SetLink(link);
-        else if (output is VineClickLamdaOutput lambda)
-            SetClickLamda(lambda);
         else
             throw new System.Exception(output.GetType().ToString() + "unsupported for this interaction");
     }
@@ -58,18 +58,18 @@ public class UniVineInteractionUI : MonoBehaviour, VineInteraction
     {
         SpawnChoiceButton(h.TextClick, () => OnChoiceMade(h.PassageName));
     }
-    void SetClickLamda(VineClickLamdaOutput link)
+    void SetClickAction(VineClickActionOutput link)
     {
-        SpawnChoiceButton(link.TextClick, link.LinesToExecute);
+        SpawnChoiceButton(link.TextClick, link.ActionBlock);
     }
-    void SetTimer(VineDelayLinkOutput dlink)
+    void SetTimer(VineDelayActionOutput dlink)
     {
         StartCoroutine(Timer(dlink));//TODO show timer
     }
-    IEnumerator Timer(VineDelayLinkOutput dlink)
+    IEnumerator Timer(VineDelayActionOutput delayOutput)
     {
         UniVineTimerUI timer = Instantiate(TimerPrefab, TimerMount);
-        float timeLeft = dlink.Delay;
+        float timeLeft = delayOutput.Delay;
         timer.SetDuration(timeLeft);
         while(timeLeft > 0)
         {
@@ -77,6 +77,6 @@ public class UniVineInteractionUI : MonoBehaviour, VineInteraction
             timer.UpdateTimer(timeLeft);
             yield return new WaitForEndOfFrame();
         }
-        OnChoiceMade(dlink.PassageName);
+        delayOutput.ActionBlock();
     }
 }
