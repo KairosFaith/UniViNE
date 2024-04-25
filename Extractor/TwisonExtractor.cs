@@ -71,7 +71,7 @@ public class TwisonExtractor : ScriptableObject
         for (int i = 1; i <= numberOfPassages; i++)//TODO investigate array outside range of collection
         {
             string passageName = listOfPassageMetadata[i - 1].Name;//id mismatch, starts from 1 and not 0
-            try
+            //try
             {
                 FormatExtractor extractor = new HarloweExtractor(rawPassageTexts[i]);
                 string[] passageText = extractor.Extract();
@@ -80,10 +80,10 @@ public class TwisonExtractor : ScriptableObject
                     File.AppendAllText(path, line + "\n");
                 File.AppendAllText(path, "\n}\n");
             }
-            catch(Exception e)
+            //catch(Exception e)
             {
-                Debug.Log(e);
-                Debug.Log(passageName + "Passage Number: " + i);
+                //Debug.LogWarning(e);
+                //Debug.LogWarning(passageName + "Passage Number: " + i);
                 //File.Delete(path);
                 //return;
             }

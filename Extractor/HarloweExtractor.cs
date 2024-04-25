@@ -1,3 +1,4 @@
+#if UNITY_EDITOR
 using Vine;
 using System;
 using System.Collections.Generic;
@@ -47,7 +48,7 @@ public class HarloweExtractor : FormatExtractor
         _RawLines.RemoveAt(0);
         return fetchLine;
     }
-    //main condition thread
+    //main condition thread, process all function macro and output lines
     string FilterAndProcessLine(string lineToProcess)
     {
         lineToProcess = lineToProcess.Trim();
@@ -59,6 +60,12 @@ public class HarloweExtractor : FormatExtractor
                 return ProcessMarkedText(lineToProcess);
             else if (IsDelayedLink(lineToProcess))
                 return ProcessDelayedLink(lineToProcess);
+            else if (IsSetMacro(lineToProcess))
+                return ProcessSetMacro(lineToProcess);
+            else if (IsRestartMacro(lineToProcess))
+                return ProcessRestartMacro(lineToProcess);
+            else if (IsGotoMacro(lineToProcess))
+                return ProcessGotoMacro(lineToProcess);
         }
         else if (IsClickLambda(lineToProcess))
             return ProcessClickLambda(lineToProcess);
@@ -70,7 +77,7 @@ public class HarloweExtractor : FormatExtractor
         {
             lineToProcess = Regex.Replace(lineToProcess, @"//([^//]+)//", @"<i>$1</i>");
             lineToProcess = Regex.Replace(lineToProcess, @"\(text-colour: *(?<color>[A-Za-z]+) *\) *\[(?<text>[^\[\]]+)\]", @"<color=$1>$2</color>", RegexOptions.ExplicitCapture);
-            lineToProcess = ProcessMacrosInString(lineToProcess);
+            lineToProcess = ProcessBranchingInString(lineToProcess);
             if (Regex.IsMatch(lineToProcess, @"^([^:\(\)]+)\(([A-Za-z]+)\): ?(.+)$"))
             {
                 Match t = Regex.Match(lineToProcess, @"^(?<character>[^:\(\)]+)\((?<emotion>[A-Za-z]+)\): ?(?<speech>.+)$", RegexOptions.ExplicitCapture);
@@ -78,6 +85,7 @@ public class HarloweExtractor : FormatExtractor
                 string character = m[nameof(character)].Value;
                 VineCharacterEmotion emotion = (VineCharacterEmotion)Enum.Parse(typeof(VineCharacterEmotion), m[nameof(emotion)].Value.ToLower());
                 string speech = m[nameof(speech)].Value.Trim();
+                speech = ProcessVariableInString(speech);
                 return $"yield return new {nameof(VineLineOutput)}(\"{character}\", {nameof(VineCharacterEmotion)}.{emotion}, $\"{speech}\");" + "\n";
             }
             else if (Regex.IsMatch(lineToProcess, @"([^:]+): *(.+)"))
@@ -86,15 +94,21 @@ public class HarloweExtractor : FormatExtractor
                 return $"yield return new {nameof(VineLineOutput)}(\"{lineToProcess}\");" + "\n";
             }
         }
-        return ProcessCStatement(lineToProcess) + ";\n";
+
+
+        //throw new Exception();
+        AddLine("//TODO check this!! Does not match any known pattern");
+        return ProcessValueStatement(lineToProcess) + ";\n";
     }
     #region Simple Process
     string ProcessMarkedText(string lineToProcess)
     {
         Match t = Regex.Match(lineToProcess, @"\[(?<messageWithArguments>.+)\]$", RegexOptions.ExplicitCapture);
         string messageWithArguments = t.Groups[nameof(messageWithArguments)].Value;
-        messageWithArguments = ProcessMacrosInString(messageWithArguments);
+        //messageWithArguments = ProcessBranchingInString(messageWithArguments);
+        //Branching should be outside, same as C#
         messageWithArguments = Regex.Replace(messageWithArguments, ", *", "\", \"");
+        messageWithArguments = ProcessVariableInString(messageWithArguments);
         return $"yield return new {nameof(UniVineMarkedOutput)}(\"{messageWithArguments}\");" + "\n";
     }
     string ProcessHeader(string lineToProcess)
@@ -118,29 +132,47 @@ public class HarloweExtractor : FormatExtractor
         List<string> codeBlock; 
         Match m = Regex.Match(lineToProcess, @"^\((?<keyword>if|else|else-?if):(?<conditionBool>[^\[\]]*)\) *(?<topLine>.*)$", RegexOptions.ExplicitCapture | RegexOptions.IgnoreCase);
         GroupCollection g = m.Groups;
+
         keyword = g[nameof(keyword)].Value;
         conditionBool = g[nameof(conditionBool)].Value;
-        string topLine = g[nameof(topLine)].Value.Trim();
-        codeBlock = MarkOutInternalBlock(topLine);
-        conditionBool = ProcessCStatement(conditionBool);
+        conditionBool = ProcessValueStatement(conditionBool);
         string branchStatement = ProcessBranchingStatement(keyword, conditionBool);
         AddLine($"{branchStatement}\n" +"{");
+
+        string topLine = g[nameof(topLine)].Value.Trim();
+        codeBlock = MarkOutInternalBlock(topLine);
         ExtractInternalBlock(codeBlock);
+
         return "}\n";
+    }
+    bool IsClickLambda(string rawLine)
+    {
+        if (Regex.IsMatch(rawLine, "(?<front>.+)\\(click: *\"(?<textClick>.+)\" *\\)", RegexOptions.IgnoreCase))
+        {
+            Match m = Regex.Match(rawLine, "(?<front>.+)\\(click: *\"(?<textClick>.+)\" *\\)", RegexOptions.IgnoreCase | RegexOptions.ExplicitCapture);
+            string front = m.Groups[nameof(front)].Value.Trim();
+            string textClick = m.Groups[nameof(textClick)].Value.Trim();
+            return front == textClick;
+        }
+        return false;
     }
     string ProcessClickLambda(string lineToProcess)
     {
-        Match m = Regex.Match(lineToProcess, "(?<front>.+)\\(click: *\"(?<textClick>.+)\" *\\) *(?<topLine>\\[.*)$", RegexOptions.ExplicitCapture | RegexOptions.IgnoreCase);
+        Match m = Regex.Match(lineToProcess, "^(?<front>.+)\\(click: *\"(?<textClick>.+)\" *\\) *(?<topLine>.*)$", RegexOptions.ExplicitCapture | RegexOptions.IgnoreCase);
         GroupCollection g = m.Groups;
-        string textClick = g[nameof(textClick)].Value;
-        string topLine = g[nameof(topLine)].Value;
+        string front = g[nameof(front)].Value.Trim();
+        string textClick = g[nameof(textClick)].Value.Trim();
+        //TODO WHATS WRONG???
+        UnityEngine.Debug.Log(front);
+        UnityEngine.Debug.Log(textClick);
+        string topLine = g[nameof(topLine)].Value.Trim();
         List<string> lambdaBlock = MarkOutInternalBlock(topLine);
-        textClick = ProcessMacrosInString(textClick);
+        //textClick = ProcessMacrosInString(textClick);
         if(TryProcessClickFunc(lambdaBlock, out string clickFunc))
-            return $"yield return new {nameof(VineClickActionOutput)}(\"{textClick}\", {clickFunc})";
+            return $"yield return new {nameof(VineClickActionOutput)}(\"{front}\", {clickFunc});";
         else
         {
-            AddLine($"yield return new {nameof(VineClickActionOutput)}(\"{textClick}\", () =>\n" + "{");
+            AddLine($"yield return new {nameof(VineClickActionOutput)}(\"{front}\", () =>\n" + "{");
             ExtractInternalBlock(lambdaBlock);
             return "});\n";
         }
@@ -148,6 +180,40 @@ public class HarloweExtractor : FormatExtractor
     bool IsDelayedLink(string input)
     {
         return Regex.IsMatch(input, @"^\(event: *when +time *>=? *\d*\.?\d+s *\)", RegexOptions.IgnoreCase);
+    }
+    bool IsSetMacro(string input)
+    {
+        return Regex.IsMatch(input, @"^\(set: *\$(.+) to (.+)\)$", RegexOptions.IgnoreCase);
+    }
+    string ProcessSetMacro(string input)
+    {
+        Match m = Regex.Match(input,
+            @"^\(set: *\$(?<variableToSet>.+) to (?<valueStatement>.+)\)$",
+            RegexOptions.ExplicitCapture | RegexOptions.IgnoreCase);
+        GroupCollection groups = m.Groups;
+        string variableToSet = groups[nameof(variableToSet)].Value;
+        string valueStatement = groups[nameof(valueStatement)].Value;
+        valueStatement = ProcessValueStatement(valueStatement);
+        return $"Set[\"{variableToSet}\"] = {valueStatement};";
+    }
+    bool IsRestartMacro(string input)
+    {
+        return Regex.IsMatch(input, @"^\(restart: *\)$", RegexOptions.IgnoreCase);
+    }
+    string ProcessRestartMacro(string input)
+    {
+        return Regex.Replace(input, @"^\(restart: *\)$", "Restart()", RegexOptions.IgnoreCase);
+    }
+    bool IsGotoMacro(string input)
+    {
+        return Regex.IsMatch(input, @"^\(go-to: *(?<passageName>.+) *\)$", RegexOptions.IgnoreCase);
+    }
+    string ProcessGotoMacro(string input)
+    {
+        Match m = Regex.Match(input, @"^\(go-to: *(?<passageName>.+) *\)$",  RegexOptions.IgnoreCase | RegexOptions.ExplicitCapture);
+        string passageName = m.Groups[nameof(passageName)].Value;
+        passageName = ProcessVariableInString(passageName);
+        return $"GoTo($\"{passageName}\");";
     }
     string ProcessDelayedLink(string lineToProcess)
     {
@@ -164,7 +230,7 @@ public class HarloweExtractor : FormatExtractor
             return "});\n";
         }
     }
-    string ProcessMacrosInString(string input)
+    string ProcessBranchingInString(string input)
     {
         if (Regex.IsMatch(input, @"\(\w+-?\w+:.*\)"))
         {
@@ -185,7 +251,7 @@ public class HarloweExtractor : FormatExtractor
                         string keyword = macroGroups[nameof(keyword)].Value;
                         string conditionBool = macroGroups[nameof(conditionBool)].Value;
                         string codeBlock = macroGroups[nameof(codeBlock)].Value;
-                        conditionBool = ProcessCStatement(conditionBool);
+                        conditionBool = ProcessValueStatement(conditionBool);
                         string branchStatement = ProcessBranchingStatement(keyword, conditionBool);
                         codeBlock = ProcessVariableInString(codeBlock);//NO macro inside the macro hook pls
                         AddLine($"{branchStatement}\ninsert{_InsertCounter} = \"{codeBlock}\";\n");
@@ -193,23 +259,26 @@ public class HarloweExtractor : FormatExtractor
                     input = input.Replace(rawChain, $"{{insert{_InsertCounter}}}");
                 }
             }
-            else
-            {
-                MatchCollection macroChains = Regex.Matches(input, @"\(\w+-?\w+:.*\)", RegexOptions.IgnoreCase);
-                foreach (Match chain in macroChains)
-                {
-                    string rawChain = chain.Value;
-                    input = input.Replace(rawChain, $"{{{ProcessCStatement(rawChain)}}}");
-                }
-            }
+            //else
+            //{
+            //    MatchCollection macroChains = Regex.Matches(input, @"\(\w+-?\w+:.*\)", RegexOptions.IgnoreCase);
+            //    foreach (Match chain in macroChains)
+            //    {
+            //        string rawChain = chain.Value;
+            //        input = input.Replace(rawChain, $"{{{ProcessCStatement(rawChain)}}}");
+            //    }
+            //}
         }
-        return ProcessVariableInString(input);
+        return input;
+        //return ProcessVariableInString(input);
     }
     #endregion
     #region Format Stuff
     List<string> MarkOutInternalBlock(string topLine)
     {
-        if (Regex.IsMatch(topLine, @"^\[=.*"))
+        //TODO link and hook brackets on the same line how?
+        string topLineToCheck = RemovePairedHooksOnLine(topLine);
+        if (Regex.IsMatch(topLineToCheck, @"^\[=.*"))
         {
             Match inHook = Regex.Match(topLine, @"^\[=(?<singleLine>.*)$", RegexOptions.ExplicitCapture);
             string singleLine = inHook.Groups[nameof(singleLine)].Value;
@@ -221,7 +290,7 @@ public class HarloweExtractor : FormatExtractor
             string singleLine = inHook.Groups[nameof(singleLine)].Value;
             return new List<string> { singleLine };
         }
-        else if (Regex.IsMatch(_RawLines[0], @"^\[.*\]$"))//if the next line is a single line wrapped block
+        else if (Regex.IsMatch(RemovePairedHooksOnLine(_RawLines[0]), @"^\[.*\]$"))//if the next line is a single line wrapped block
         {
             string nextLine = DrawFetchLine();
             Match inHook = Regex.Match(nextLine, @"^\[(?<singleLine>.*)\]$", RegexOptions.ExplicitCapture);
@@ -244,7 +313,7 @@ public class HarloweExtractor : FormatExtractor
                 }
                 else if (Regex.IsMatch(lineWithRemovedHookPairs, @"\]$"))
                 {
-                    inHook = Regex.Match(nextLine, @"^(?<block>.*)\]$", RegexOptions.ExplicitCapture);
+                    inHook = Regex.Match(nextLine, @"(?<block>.*)\]$", RegexOptions.ExplicitCapture);
                     toReturn.Add(inHook.Groups["block"].Value);
                     h--;
                     if (h == 0)
@@ -262,9 +331,9 @@ public class HarloweExtractor : FormatExtractor
         string lineToReturn = line;
         do
         {
-            pairedHook = Regex.IsMatch(lineToReturn, @"\[(^[\[\]].+)\]");
+            pairedHook = Regex.IsMatch(lineToReturn, @"\[([^\[\]]*)\]");
             if (pairedHook)
-                lineToReturn = Regex.Replace(lineToReturn, @"\[(^[\[\]].+)\]", "");
+                lineToReturn = Regex.Replace(lineToReturn, @"\[([^\[\]]*)\]", "");
         }
         while (pairedHook);
         return lineToReturn;
@@ -298,20 +367,19 @@ public class HarloweExtractor : FormatExtractor
         output = string.Empty;//what else could it be?
         return false;
     }
-    bool IsClickLambda(string rawLine)
+    bool ContainsVariable(string input)
     {
-        if (Regex.IsMatch(rawLine, "(?<front>.+)\\(click: *\"(?<textClick>.+)\" *\\)", RegexOptions.IgnoreCase))
-        {
-            Match m = Regex.Match(rawLine, "(?<front>.+)\\(click: *\"(?<textClick>.+)\" *\\)", RegexOptions.IgnoreCase | RegexOptions.ExplicitCapture);
-            string front = m.Groups[nameof(front)].Value;
-            string textClick = m.Groups[nameof(textClick)].Value;
-            return front == textClick;
-        }
-        return false;
+        return Regex.IsMatch(input, @"\$(\w+)");
+    }
+    string ProcessVariable(string input)
+    {
+        if (ContainsVariable(input))
+            input = Regex.Replace(input, @"\$(?<variableName>\w+)", "Get(\"$1\")", RegexOptions.ExplicitCapture);
+        return input;
     }
     string ProcessVariableInString(string input)
     {
-        if (Regex.IsMatch(input, @"\$(\w+)"))
+        if (ContainsVariable(input))
             input = Regex.Replace(input, @"\$(?<variableName>\w+)", "{Get(\"$1\")}", RegexOptions.ExplicitCapture);
         return input;
     }
@@ -330,17 +398,9 @@ public class HarloweExtractor : FormatExtractor
             return $"else if({conditionBool})";
         return keyword;
     }
-    string ProcessCStatement(string rawStatement)
+    string ProcessValueStatement(string rawStatement)
     {
         List<string> fetches = new List<string>();
-        //Fixed Statement structures
-        if (Regex.IsMatch(rawStatement, @"^\(set: *\$(.+) to (.+)\)$", RegexOptions.IgnoreCase))
-            rawStatement = Regex.Replace(rawStatement, @"^\(set: *\$(?<variableToSet>.+) to (?<valueStatement>.+)\)$", "Set[\"$1\"] = $2", RegexOptions.ExplicitCapture | RegexOptions.IgnoreCase);
-        //Coded Functions
-        if (Regex.IsMatch(rawStatement, @"^\(restart: *\)$", RegexOptions.IgnoreCase))
-            rawStatement = Regex.Replace(rawStatement, @"\(restart: *\)", "Restart()", RegexOptions.IgnoreCase);
-        if (Regex.IsMatch(rawStatement, @"^\(go-to: *(?<passageName>.+) *\)$", RegexOptions.IgnoreCase))
-            rawStatement = Regex.Replace(rawStatement, @"^\(go-to: *(?<passageName>.+) *\)$", "GoTo($1)", RegexOptions.IgnoreCase | RegexOptions.ExplicitCapture);
         //process brackets
         while (Regex.IsMatch(rawStatement, @"\(([^\(\)]+)\)"))
         {
@@ -401,7 +461,8 @@ public class HarloweExtractor : FormatExtractor
         rawStatement = Regex.Replace(rawStatement, @" +and +", "&&");
         rawStatement = Regex.Replace(rawStatement, @" +is +", "==");
         rawStatement = Regex.Replace(rawStatement, @" +is +not +", " != ");
-        rawStatement = Regex.Replace(rawStatement, @"\$(?<variableName>\w+)", "Get(\"$1\")");
+        if(ContainsVariable(rawStatement))
+            rawStatement = ProcessVariable(rawStatement);
         return rawStatement;
     }
     bool IsLinkHook(string input)
@@ -414,3 +475,4 @@ public class HarloweExtractor : FormatExtractor
     }
     #endregion
 }
+#endif
